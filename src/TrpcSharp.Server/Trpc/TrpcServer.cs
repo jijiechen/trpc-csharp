@@ -29,9 +29,9 @@ namespace TrpcSharp.Server.Trpc
 
         private class TrpcConnectionHandler : ConnectionHandler
         {
-            private readonly ITrpcMessageFramer _framer;
+            private readonly ITrpcPacketFramer _framer;
 
-            public TrpcConnectionHandler(ITrpcMessageFramer framer)
+            public TrpcConnectionHandler(ITrpcPacketFramer framer)
             {
                 _framer = framer;
             }
@@ -49,11 +49,15 @@ namespace TrpcSharp.Server.Trpc
                         if (_framer.TryParseMessage(ref buffer, out var message, out SequencePosition consumed,
                             out SequencePosition examined))
                         {
-                            await ProcessMessageAsync(message);
+                            ProcessMessage(message);
                         }
 
                         input.AdvanceTo(consumed, examined);
                     }
+                }
+                catch(ConnectionResetException closeEx)
+                {
+                    // todo: connection closed
                 }
                 finally
                 {
@@ -63,11 +67,17 @@ namespace TrpcSharp.Server.Trpc
                 }
             }
 
-            private async Task ProcessMessageAsync(UnaryRequestMessage trpcMessage)
+            private void ProcessMessage(ITrpcRequestMessage trpcMessage)
             {
-                var sr = new StreamReader(trpcMessage.Data);
-                var data = await sr.ReadToEndAsync();
-                Console.WriteLine($"Request {trpcMessage.RequestId} has been well received.");
+                switch (trpcMessage)
+                {
+                    case UnaryRequestMessage unaryMessage:
+                        Console.WriteLine($"Unary request {unaryMessage.RequestId} has been well received.");
+                        break;
+                    case StreamRequestMessage streamMessage:
+                        Console.WriteLine($"Stream message {streamMessage.StreamFrameType} {streamMessage.StreamId} has been well received.");
+                        break;
+                }
             }
         }
     }

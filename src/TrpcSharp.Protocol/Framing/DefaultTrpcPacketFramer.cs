@@ -2,42 +2,49 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
-using TrpcSharp.Protocol.Framing.Unary;
+using TrpcSharp.Protocol.Framing.MessageFramers;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing
 {
-    public class DefaultTrpcMessageFramer : ITrpcMessageFramer
+    public class DefaultTrpcPacketFramer : ITrpcPacketFramer
     {
-        public bool TryParseMessage(ref ReadOnlySequence<byte> buffer, out UnaryRequestMessage trpcMessage, 
+        public bool TryParseMessage(ref ReadOnlySequence<byte> buffer, out ITrpcRequestMessage trpcMessage, 
             out SequencePosition consumed, out SequencePosition examined)
         {
             examined = consumed = buffer.Start;
             var hasHeader = TryReadFrameHeader(buffer, out var frameHeader);
-            if (hasHeader)
+            if (!hasHeader)
             {
-                if (buffer.Length < frameHeader.FrameTotalSize)
-                {
+                examined = buffer.End;
+                trpcMessage = null;
+                return false;
+            }
+
+            if (buffer.Length < frameHeader.FrameTotalSize)
+            {
+                examined = buffer.End;
+                trpcMessage = null;
+                return false;
+            }
+
+            var messageBytes = buffer.Slice(FrameHeaderPositions.FrameHeader_TotalLength);
+            switch (frameHeader.FrameType)
+            {
+                case TrpcDataFrameType.TrpcUnaryFrame:
+                    trpcMessage = UnaryMessageFramer.DecodeRequestMessage(frameHeader, messageBytes);
+                    examined = consumed = buffer.GetPosition(frameHeader.FrameTotalSize, buffer.Start);
+                    return true;
+                case TrpcDataFrameType.TrpcStreamFrame:
+                    trpcMessage = StreamMessageFramer.DecodeRequestMessage(frameHeader, messageBytes);
+                    examined = consumed = buffer.GetPosition(frameHeader.FrameTotalSize, buffer.Start);
+                    return true;
+                default:
+                    // should not reach here!
                     examined = buffer.End;
                     trpcMessage = null;
                     return false;
-                }
-                
-                var messageBytes = buffer.Slice(FrameHeaderPositions.FrameHeader_TotalLength); 
-                if (frameHeader.FrameType == TrpcDataFrameType.TrpcUnaryFrame)
-                {
-                    trpcMessage = UnaryFramer.DecodeRequestMessage(frameHeader, messageBytes);
-                    examined = consumed = buffer.GetPosition(frameHeader.FrameTotalSize, buffer.Start);
-                    return true;
-                }
             }
-            else
-            {
-                examined = buffer.End;
-            }
-            
-            trpcMessage = null;
-            return false;
         }
         
         private static bool TryReadFrameHeader(in ReadOnlySequence<byte> buffer, out FrameHeader header)
@@ -69,13 +76,19 @@ namespace TrpcSharp.Protocol.Framing
                 Magic = ReadTrpcMagic(headerBytes),
                 FrameType = ReadFrameType(headerBytes),
                 StreamFrameType = ReadStreamFrameType(headerBytes),
-                FrameTotalSize = ReadMessageBodySize(headerBytes),
-                StreamId = ReadStreamId(headerBytes)
+                FrameTotalSize = ReadMessageBodySize(headerBytes)
             };
 
-            if (header.FrameType == TrpcDataFrameType.TrpcUnaryFrame)
+            switch (header.FrameType)
             {
-                header.MessageHeaderSize = ReadMessageHeaderSize(headerBytes);
+                case TrpcDataFrameType.TrpcUnaryFrame:
+                    header.MessageHeaderSize = ReadMessageHeaderSize(headerBytes);
+                    break;
+                case TrpcDataFrameType.TrpcStreamFrame:
+                    header.StreamId = ReadStreamId(headerBytes);
+                    break;
+                default:
+                    throw new InvalidDataException($"Not supported tRPC frame type:{(byte)header.FrameType}");
             }
             return true;
         }
@@ -123,13 +136,13 @@ namespace TrpcSharp.Protocol.Framing
             return BinaryPrimitives.ReadUInt16BigEndian(bytes);
         }
 
-        private static long ReadMessageBodySize(ReadOnlySpan<byte> headerBytes)
+        private static uint ReadMessageBodySize(ReadOnlySpan<byte> headerBytes)
         {
             var bytes = headerBytes.Slice(FrameHeaderPositions.PacketSize_Start);
             return BinaryPrimitives.ReadUInt32BigEndian(bytes);
         }
 
-        private static long ReadStreamId(ReadOnlySpan<byte> headerBytes)
+        private static uint ReadStreamId(ReadOnlySpan<byte> headerBytes)
         {
             var bytes = headerBytes.Slice(FrameHeaderPositions.StreamId_Start);
             return BinaryPrimitives.ReadUInt32BigEndian(bytes);

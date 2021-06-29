@@ -18,7 +18,7 @@ namespace TrpcSharp.Server.Trpc
                 o.EndPoint = endPoint;
             });
 
-            services.TryAddSingleton<ITrpcMessageFramer, DefaultTrpcMessageFramer>();
+            services.TryAddSingleton<ITrpcPacketFramer, DefaultTrpcPacketFramer>();
             return services;
         }
     }

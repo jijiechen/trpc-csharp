@@ -21,12 +21,13 @@ using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using IOStream = System.IO.Stream;
 
 namespace TrpcSharp.Protocol.Framing
 {
     // taken from https://github.com/grpc/grpc-dotnet/blob/f54a118569/src/Grpc.AspNetCore.Server/Internal/ReadOnlySequenceStream.cs
     // Potentially remove in the future when https://github.com/dotnet/corefx/issues/31804 is implemented
-    internal class ReadOnlySequenceStream : Stream
+    internal class ReadOnlySequenceStream : IOStream
     {
         private static readonly Task<int> TaskOfZero = Task.FromResult(0);
 
@@ -157,7 +158,7 @@ namespace TrpcSharp.Protocol.Framing
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+        public override async Task CopyToAsync(IOStream destination, int bufferSize, CancellationToken cancellationToken)
         {
             foreach (var segment in _readOnlySequence)
             {

@@ -2,9 +2,9 @@
 using System.Linq;
 using TrpcSharp.Protocol.Standard;
 
-namespace TrpcSharp.Protocol.Framing.Unary
+namespace TrpcSharp.Protocol.Framing.MessageFramers
 {
-    public class UnaryFramer
+    internal static class UnaryMessageFramer
     {
         public static UnaryRequestMessage DecodeRequestMessage(FrameHeader frameHeader, ReadOnlySequence<byte> messageBytes)
         {
@@ -17,13 +17,13 @@ namespace TrpcSharp.Protocol.Framing.Unary
             return new UnaryRequestMessage
             {
                 RequestId = msgHeader.RequestId,
-                FunctionName = msgHeader.Func.ToStringUtf8(),
+                Func = msgHeader.Func?.ToStringUtf8(),
                 CallType = (TrpcCallType)msgHeader.CallType,
-                Caller = msgHeader.Caller.ToStringUtf8(),
-                Callee = msgHeader.Callee.ToStringUtf8(),
+                Caller = msgHeader.Caller?.ToStringUtf8(),
+                Callee = msgHeader.Callee?.ToStringUtf8(),
                 Timeout = msgHeader.Timeout,
                 MessageType = (TrpcMessageType)msgHeader.MessageType,
-                Context = msgHeader.TransInfo.ToDictionary(i => i.Key, i=> i.Value.Memory),
+                TransInfo = msgHeader.TransInfo?.ToDictionary(i => i.Key, i=> i.Value.Memory),
                 ContentType = (TrpcContentEncodeType)msgHeader.ContentType,
                 ContentEncoding = (TrpcCompressType)msgHeader.ContentEncoding,
                 Data =  bodyStream

@@ -2,13 +2,13 @@
 
 namespace TrpcSharp.Protocol.Framing
 {
-    public struct FrameHeader
+    internal struct FrameHeader
     {
         public ushort Magic { get; set; }
         public TrpcDataFrameType FrameType { get; set; }
         public TrpcStreamFrameType StreamFrameType { get; set; }
         public ushort MessageHeaderSize { get; set; }
-        public long FrameTotalSize { get; set; }
-        public long StreamId { get; set; }
+        public uint FrameTotalSize { get; set; }
+        public uint StreamId { get; set; }
     }
 }
