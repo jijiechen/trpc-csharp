@@ -29,7 +29,5 @@ namespace TrpcSharp.Protocol.Framing.Unary
                 Data =  bodyStream
             };
         }
-        
-        
     }
 }

@@ -10,7 +10,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 框架生成的请求序列号
         ///</summary>
-        public long RequestId{get;set;} 
+        public uint RequestId{get;set;} 
 
         ///<summary>
         /// 请求的函数名
@@ -35,7 +35,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 客户端超时时间
         ///</summary>
-        public long Timeout{get;set;} 
+        public uint Timeout{get;set;} 
 
         ///<summary>
         /// 框架信息透传的消息类型

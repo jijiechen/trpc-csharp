@@ -39,16 +39,27 @@ namespace TrpcSharp.Server.Trpc
             public override async Task OnConnectedAsync(ConnectionContext connection)
             {
                 var input = connection.Transport.Input;
-                while (true)
+                try
                 {
-                    var result = await input.ReadAsync();
-                    var buffer = result.Buffer;
-                    
-                    if (_framer.TryParseMessage(ref buffer, out var message, out SequencePosition consumed, out SequencePosition examined))
+                    while (!connection.ConnectionClosed.IsCancellationRequested)
                     {
-                        await ProcessMessageAsync(message);
+                        var result = await input.ReadAsync();
+                        var buffer = result.Buffer;
+
+                        if (_framer.TryParseMessage(ref buffer, out var message, out SequencePosition consumed,
+                            out SequencePosition examined))
+                        {
+                            await ProcessMessageAsync(message);
+                        }
+
+                        input.AdvanceTo(consumed, examined);
                     }
-                    input.AdvanceTo(consumed, examined); 
+                }
+                finally
+                {
+                    // Complete the transport PipeReader and PipeWriter after calling into application code
+                    await connection.Transport.Input.CompleteAsync();
+                    await connection.Transport.Output.CompleteAsync();
                 }
             }
 

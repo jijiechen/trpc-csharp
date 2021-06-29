@@ -85,7 +85,7 @@ namespace TrpcSharp.Protocol.Framing
             var magic = BinaryPrimitives.ReadUInt16BigEndian(headerByte);
             if (magic != (ushort) TrpcMagic.Value)
             {
-                throw new IOException("No tRPC message detected");
+                throw new InvalidDataException("No tRPC message detected");
             }
 
             return magic;
