@@ -57,7 +57,7 @@ namespace TrpcSharp.Protocol.Framing
             }
         }
 
-        public void WriteMessage(ITrpcMessage reqMessage, IBufferWriter<byte> output)
+        public void WriteMessage(ITrpcMessage reqMessage, Stream output)
         {
             switch (reqMessage)
             {

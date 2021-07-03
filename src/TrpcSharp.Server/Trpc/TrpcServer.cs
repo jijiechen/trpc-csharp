@@ -50,6 +50,8 @@ namespace TrpcSharp.Server.Trpc
                         var result = await input.ReadAsync();
                         var buffer = result.Buffer;
 
+                        Console.WriteLine($"Output hashcode 1: {connection.Transport.Output.GetHashCode()}");
+                        
                         if (_framer.TryReadMessageAsServer(ref buffer, out var message, out SequencePosition consumed,
                             out SequencePosition examined))
                         {

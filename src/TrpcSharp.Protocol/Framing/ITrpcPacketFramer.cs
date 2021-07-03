@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.IO;
 
 namespace TrpcSharp.Protocol.Framing
 {
@@ -11,6 +12,6 @@ namespace TrpcSharp.Protocol.Framing
         bool TryReadMessageAsServer(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
             out SequencePosition consumed, out SequencePosition examined);
         
-        void WriteMessage(ITrpcMessage trpcMessage, IBufferWriter<byte> output);
+        void WriteMessage(ITrpcMessage trpcMessage, Stream output);
     }
 }

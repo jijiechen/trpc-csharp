@@ -35,10 +35,9 @@ namespace TrpcSharp.Server.Trpc
                 StreamId = StreamMessage.StreamId,
                 Data = data
             };
-            await Task.Run(() =>
-            {
-                _framer.WriteMessage(streamMessage, Transport.Output);
-            });
+            
+            _framer.WriteMessage(streamMessage, Transport.Output.AsStream(leaveOpen: true));
+            await Transport.Output.FlushAsync();
         }
     }
 

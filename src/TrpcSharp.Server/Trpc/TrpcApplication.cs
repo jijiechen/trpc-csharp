@@ -122,7 +122,10 @@ namespace TrpcSharp.Server.Trpc
 
                     if (ctx is UnaryTrpcContext unaryCtx && unaryCtx.UnaryRequest.CallType == TrpcCallType.TrpcUnaryCall)
                     {
-                        _trpcFramer.WriteMessage(unaryCtx.UnaryResponse, ctx.Transport.Output);
+                        var transportOutput = ctx.Transport.Output;
+                        
+                        Console.WriteLine($"Output hashcode 2: {transportOutput.GetHashCode()}");
+                        _trpcFramer.WriteMessage(unaryCtx.UnaryResponse, transportOutput.AsStream(leaveOpen: true));
                     }
                     _logger.LogDebug($"tRPC complete: {ctx.Id}");
                 }

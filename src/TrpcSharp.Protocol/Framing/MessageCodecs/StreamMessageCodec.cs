@@ -98,7 +98,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             };
         }
     
-        public static void Encode(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, IBufferWriter<byte> output)
+        public static void Encode(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             IMessage metaMessage = null;
             Stream dataMsgBody = null;
@@ -121,8 +121,9 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                     break;
             }
 
-            var msgLength = (dataMsgBody?.Length ?? 0) + (metaMessage?.CalculateSize() ?? 0);
-            var totalLength =  PacketHeaderPositions.FrameHeader_TotalLength + msgLength;
+            var streamMetaLength = (metaMessage?.CalculateSize() ?? 0);
+            var streamDataLength = (dataMsgBody?.Length ?? 0);
+            var totalLength =  PacketHeaderPositions.FrameHeader_TotalLength + streamMetaLength + streamDataLength;
             if (totalLength > uint.MaxValue)
             {
                 throw new InvalidDataException("Message too large");
@@ -141,7 +142,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             
             output.Write(headerBytes);
             metaMessage?.WriteTo(output);
-            dataMsgBody?.WriteTo(output);
+            dataMsgBody?.CopyTo(output);
         }
 
         static IMessage ComposeTrpcInitMeta(StreamInitMessage initMsg)

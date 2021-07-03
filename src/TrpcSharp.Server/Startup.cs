@@ -10,8 +10,9 @@ namespace TrpcSharp.Server
             app.Run(async ctx =>
             {
                 var unaryCtx = (ctx as UnaryTrpcContext);
-                
-                Console.WriteLine($"New invocation: {ctx.Id}, callee: {unaryCtx.UnaryRequest.Callee}");
+                unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Id}";
+                // , callee: {unaryCtx.UnaryRequest.Callee}
+                Console.WriteLine($"New invocation: {ctx.Id}");
                 
                 // ctx.UnaryResponse
             });

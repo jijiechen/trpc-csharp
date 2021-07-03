@@ -1,6 +1,4 @@
 ﻿using System.Net;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -19,7 +17,6 @@ namespace TrpcSharp.Server.Trpc
             services.TryAddSingleton<ITrpcApplication, TrpcApplication>();
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, TrpcApplication>(
                 sp => (TrpcApplication)(sp.GetService<ITrpcApplication>()) ));
-            
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IConfigureOptions<KestrelServerOptions>, TrpcServerOptionsSetup>());
             
             services.Configure<ServerOptions>(o =>

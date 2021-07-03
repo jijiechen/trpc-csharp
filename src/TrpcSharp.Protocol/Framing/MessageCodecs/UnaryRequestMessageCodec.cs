@@ -33,7 +33,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
         }
 
         public static void Encode(UnaryRequestMessage reqMessage, 
-            Func<PacketHeader, byte[]> frameHeaderEncoder, IBufferWriter<byte> output)
+            Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             var msgHeader = new RequestProtocol
             {
@@ -70,7 +70,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             
             output.Write(headerBytes);
             msgHeader.WriteTo(output);
-            reqMessage.Data?.WriteTo(output);
+            reqMessage.Data?.CopyTo(output);
         }
     }
 }

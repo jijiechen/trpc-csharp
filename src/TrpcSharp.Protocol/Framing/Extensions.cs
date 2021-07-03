@@ -50,6 +50,7 @@ namespace TrpcSharp.Protocol.Framing
                 }
 
                 output.Write(buffer.AsSpan(0, bytesRead));
+                output.Advance(bytesRead);
                 ArrayPool<byte>.Shared.Return(buffer);
                 if (bytesRead < bufferSize)
                 {
