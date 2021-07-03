@@ -1,4 +1,5 @@
 ﻿using System;
+using TrpcSharp.Protocol.Standard;
 using TrpcSharp.Server.Trpc;
 
 namespace TrpcSharp.Server
@@ -9,12 +10,19 @@ namespace TrpcSharp.Server
         {
             app.Run(async ctx =>
             {
-                var unaryCtx = (ctx as UnaryTrpcContext);
-                unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Id}";
-                // , callee: {unaryCtx.UnaryRequest.Callee}
                 Console.WriteLine($"New invocation: {ctx.Id}");
+
+                if (ctx is UnaryTrpcContext unaryCtx)
+                {
+                    unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Id}";
+                }
                 
-                // ctx.UnaryResponse
+                if (ctx is StreamTrpcContext streamCtx && streamCtx.StreamMessage.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameData)
+                {
+                    // await streamCtx.Push()
+                }
+                
+                
             });
         }
     }

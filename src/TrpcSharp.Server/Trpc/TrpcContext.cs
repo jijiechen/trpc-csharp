@@ -3,6 +3,7 @@ using System.IO.Pipelines;
 using System.Threading.Tasks;
 using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
+using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Server.Trpc
 {
@@ -13,10 +14,29 @@ namespace TrpcSharp.Server.Trpc
     }
 
     public class UnaryTrpcContext : TrpcContext
-    {
+    {       
+        private readonly ITrpcPacketFramer _framer;
+        private volatile bool _hasResponded = false;
+        internal UnaryTrpcContext(ITrpcPacketFramer framer)
+        {
+            _framer = framer;
+        }
+
+        public bool HasResponded => _hasResponded;
         public UnaryRequestMessage UnaryRequest { get; set; }
         
         public UnaryResponseMessage UnaryResponse { get; set; }
+        
+        public async Task Respond()
+        {
+            _hasResponded = true;
+            if (UnaryRequest.CallType == TrpcCallType.TrpcOnewayCall)
+            {
+                return;
+            }
+            
+            await _framer.WriteMessage(UnaryResponse, Transport.Output.AsStream(leaveOpen: true));
+        }
     }
     
     public class StreamTrpcContext: TrpcContext
@@ -36,8 +56,7 @@ namespace TrpcSharp.Server.Trpc
                 Data = data
             };
             
-            _framer.WriteMessage(streamMessage, Transport.Output.AsStream(leaveOpen: true));
-            await Transport.Output.FlushAsync();
+            await _framer.WriteMessage(streamMessage, Transport.Output.AsStream(leaveOpen: true));
         }
     }
 

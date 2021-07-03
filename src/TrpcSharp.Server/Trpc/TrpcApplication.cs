@@ -35,7 +35,6 @@ namespace TrpcSharp.Server.Trpc
             _requestQueue = new ConcurrentQueue<TrpcContext>();
         }
 
-
         public Task StartAsync(CancellationToken cancellationToken)
         {
             _requestDelegate = _appBuilder.Build();
@@ -66,10 +65,10 @@ namespace TrpcSharp.Server.Trpc
             switch (incomingMessage)
             {
                 case UnaryRequestMessage unaryMsg:
-                    context = new UnaryTrpcContext
+                    context = new UnaryTrpcContext(_trpcFramer)
                     {
                         Transport = connection.Transport,
-                        Id = new ContextId() {Type = ContextType.UnaryRequest, Id = unaryMsg.RequestId},
+                        Id = new ContextId {Type = ContextType.UnaryRequest, Id = unaryMsg.RequestId},
                         UnaryRequest = unaryMsg,
                         UnaryResponse = CreateResponse(unaryMsg)
                     };
@@ -78,7 +77,7 @@ namespace TrpcSharp.Server.Trpc
                     context = new StreamTrpcContext(_trpcFramer)
                     {
                         Transport = connection.Transport,
-                        Id = new ContextId() {Type = ContextType.StreamConnection, Id = streamMsg.StreamId},
+                        Id = new ContextId {Type = ContextType.StreamConnection, Id = streamMsg.StreamId},
                         StreamMessage = streamMsg
                     };
                     break;
@@ -120,13 +119,7 @@ namespace TrpcSharp.Server.Trpc
                     requestHandle.ConfigureAwait(false);
                     requestHandle.Wait();
 
-                    if (ctx is UnaryTrpcContext unaryCtx && unaryCtx.UnaryRequest.CallType == TrpcCallType.TrpcUnaryCall)
-                    {
-                        var transportOutput = ctx.Transport.Output;
-                        
-                        Console.WriteLine($"Output hashcode 2: {transportOutput.GetHashCode()}");
-                        _trpcFramer.WriteMessage(unaryCtx.UnaryResponse, transportOutput.AsStream(leaveOpen: true));
-                    }
+                    // todo: dispose context
                     _logger.LogDebug($"tRPC complete: {ctx.Id}");
                 }
                 catch(Exception ex)

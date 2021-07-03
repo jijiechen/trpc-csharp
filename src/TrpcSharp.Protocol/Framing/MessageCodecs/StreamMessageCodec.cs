@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using Google.Protobuf;
 using TrpcSharp.Protocol.Standard;
 
@@ -98,7 +99,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             };
         }
     
-        public static void Encode(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
+        public static async Task Encode(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             IMessage metaMessage = null;
             Stream dataMsgBody = null;
@@ -142,7 +143,10 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             
             output.Write(headerBytes);
             metaMessage?.WriteTo(output);
-            dataMsgBody?.CopyTo(output);
+            if (dataMsgBody != null)
+            {
+              await dataMsgBody.CopyToAsync(output);
+            }
         }
 
         static IMessage ComposeTrpcInitMeta(StreamInitMessage initMsg)

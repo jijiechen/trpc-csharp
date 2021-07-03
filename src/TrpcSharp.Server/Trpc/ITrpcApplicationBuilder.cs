@@ -42,7 +42,10 @@ namespace TrpcSharp.Server.Trpc
         {
             TrpcRequestDelegate app = ctx =>
             {
-                // todo: default process!
+                if (ctx is UnaryTrpcContext {HasResponded: false} unaryCtx)
+                {
+                    return unaryCtx.Respond();
+                }
                 return Task.CompletedTask;
             };
 

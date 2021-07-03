@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
+using System.Threading.Tasks;
 using Google.Protobuf;
 using TrpcSharp.Protocol.Standard;
 
@@ -32,7 +33,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             };
         }
 
-        public static void Encode(UnaryRequestMessage reqMessage, 
+        public static async Task Encode(UnaryRequestMessage reqMessage, 
             Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             var msgHeader = new RequestProtocol
@@ -70,7 +71,10 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             
             output.Write(headerBytes);
             msgHeader.WriteTo(output);
-            reqMessage.Data?.CopyTo(output);
+            if (reqMessage.Data != null)
+            {
+                await reqMessage.Data.CopyToAsync(output);
+            }
         }
     }
 }

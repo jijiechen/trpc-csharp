@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
+using System.Threading.Tasks;
 using TrpcSharp.Protocol.Framing.MessageCodecs;
 using TrpcSharp.Protocol.Standard;
 
@@ -57,18 +58,18 @@ namespace TrpcSharp.Protocol.Framing
             }
         }
 
-        public void WriteMessage(ITrpcMessage reqMessage, Stream output)
+        public async Task WriteMessage(ITrpcMessage reqMessage, Stream output)
         {
             switch (reqMessage)
             {
                 case UnaryRequestMessage unaryReqMsg:
-                    UnaryRequestMessageCodec.Encode(unaryReqMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    await UnaryRequestMessageCodec.Encode(unaryReqMsg, PacketHeaderCodec.EncodePacketHeader, output);
                     break;
                 case UnaryResponseMessage unaryRespMsg:
-                    UnaryResponseMessageCodec.Encode(unaryRespMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    await UnaryResponseMessageCodec.Encode(unaryRespMsg, PacketHeaderCodec.EncodePacketHeader, output);
                     break;
                 case StreamMessage streamMsg:
-                    StreamMessageCodec.Encode(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    await StreamMessageCodec.Encode(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
                     break;
                 default:
                     throw new InvalidDataException($"Unsupported tRPC message type: {reqMessage.GetType()}");
