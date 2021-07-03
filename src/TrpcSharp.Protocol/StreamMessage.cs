@@ -6,7 +6,7 @@ using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol
 {
-    public abstract class StreamRequestMessage : ITrpcRequestMessage
+    public abstract class StreamMessage : ITrpcRequestMessage
     {
         /// <summary>
         /// 流式帧类型
@@ -45,7 +45,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 附加数据 trans_info
         ///</summary>
-        public Dictionary<string, ReadOnlyMemory<byte>> TransInfo { get; set; }
+        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
     }
 
     public class StreamInitResponseMeta
@@ -54,7 +54,7 @@ namespace TrpcSharp.Protocol
         public string ErrorMessage  { get; set; }
     }
     
-    public class StreamInitMessage : StreamRequestMessage
+    public class StreamInitMessage : StreamMessage
     {
         public StreamInitMessage()
         {
@@ -87,7 +87,7 @@ namespace TrpcSharp.Protocol
         public TrpcCompressType ContentEncoding { get; set; }
     }
 
-    public class StreamDataMessage : StreamRequestMessage
+    public class StreamDataMessage : StreamMessage
     {
         public StreamDataMessage()
         {
@@ -100,7 +100,7 @@ namespace TrpcSharp.Protocol
         public Stream Data { get; set; }
     }
 
-    public class StreamFeedbackMessage : StreamRequestMessage
+    public class StreamFeedbackMessage : StreamMessage
     {
         public StreamFeedbackMessage()
         {
@@ -113,7 +113,7 @@ namespace TrpcSharp.Protocol
         public uint WindowSizeIncrement { get; set; }
     }
 
-    public class StreamCloseMessage : StreamRequestMessage
+    public class StreamCloseMessage : StreamMessage
     {
         public StreamCloseMessage()
         {
@@ -128,7 +128,7 @@ namespace TrpcSharp.Protocol
         /// <summary>
         /// close 返回码
         /// </summary>
-        public int RetCode { get; set; }
+        public int ReturnCode { get; set; }
 
         /// <summary>
         /// close信息描述
@@ -141,6 +141,6 @@ namespace TrpcSharp.Protocol
         public int FuncCode { get; set; }
 
         public TrpcMessageType MessageType { get; set; }
-        public Dictionary<string, ReadOnlyMemory<byte>> TransInfo { get; set; }
+        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
     }
 }

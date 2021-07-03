@@ -81,7 +81,7 @@ namespace TrpcSharp.Server.Trpc
                     case UnaryRequestMessage unaryMessage:
                         Console.WriteLine($"Unary request {unaryMessage.RequestId} has been well received.");
                         break;
-                    case StreamRequestMessage streamMessage:
+                    case StreamMessage streamMessage:
                         Console.WriteLine($"Stream message {streamMessage.StreamFrameType} {streamMessage.StreamId} has been well received.");
                         break;
                 }

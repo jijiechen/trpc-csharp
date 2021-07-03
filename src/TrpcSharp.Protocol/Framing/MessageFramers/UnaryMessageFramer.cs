@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Google.Protobuf;
 using TrpcSharp.Protocol.Standard;
 
@@ -29,15 +27,12 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                 MessageType = (TrpcMessageType)msgHeader.MessageType,
                 ContentType = (TrpcContentEncodeType)msgHeader.ContentType,
                 ContentEncoding = (TrpcCompressType)msgHeader.ContentEncoding,
-                AdditionalData = msgHeader.TransInfo?
-                    .ToDictionary(i => i.Key, 
-                        i=> new TrpcAdditionalData(i.Value.Memory)) 
-                                 ?? new Dictionary<string, TrpcAdditionalData>(),
+                AdditionalData = msgHeader.TransInfo.ToAdditionalData(),
                 Data =  bodyStream
             };
         }
-        
-        
+
+
         public static void EncodeRequestMessage(UnaryRequestMessage requestMessage, 
             Func<PacketHeader, byte[]> frameHeaderEncoder, IBufferWriter<byte> output)
         {
@@ -64,9 +59,9 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                 }
             }
 
-            var msgHeaderBytes = protocolReq.ToByteArray();
-            var packageTotalLength = PacketHeaderPositions.FrameHeader_TotalLength + msgHeaderBytes.Length + (requestMessage.Data?.Length ?? 0);
-            if(packageTotalLength > uint.MaxValue)
+            var msgHeaderLength = protocolReq.CalculateSize();
+            var packageTotalLength = PacketHeaderPositions.FrameHeader_TotalLength + msgHeaderLength + (requestMessage.Data?.Length ?? 0);
+            if(msgHeaderLength > ushort.MaxValue || packageTotalLength > uint.MaxValue)
             {
                 throw new InvalidDataException("Message too large");
             }
@@ -76,36 +71,15 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                 Magic = (ushort) TrpcMagic.Value,
                 FrameType = TrpcDataFrameType.TrpcUnaryFrame,
                 StreamFrameType = TrpcStreamFrameType.TrpcUnary,
-                MessageHeaderSize = (ushort) msgHeaderBytes.Length,
+                MessageHeaderSize = (ushort) msgHeaderLength,
                 PacketTotalSize = (uint) packageTotalLength,
                 StreamId = 0,
             };
             var headerBytes = frameHeaderEncoder(frameHeader);
             
             output.Write(headerBytes);
-            output.Write(msgHeaderBytes.AsSpan());
-            if (requestMessage.Data == null)
-            {
-                return;
-            }
-            
-            const int bufferSize = 4096;
-            while (true)
-            {
-                var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-                var bytesRead = requestMessage.Data.Read(buffer, 0, bufferSize);
-                if (bytesRead == 0)
-                {
-                    break;
-                }
-
-                output.Write(buffer.AsSpan(0, bytesRead));
-                ArrayPool<byte>.Shared.Return(buffer);
-                if (bytesRead < bufferSize)
-                {
-                    break;
-                }
-            }
+            protocolReq.WriteTo(output);
+            requestMessage.Data?.WriteTo(output);
         }
     }
 }

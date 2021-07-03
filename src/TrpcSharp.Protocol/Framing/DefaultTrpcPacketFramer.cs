@@ -34,7 +34,7 @@ namespace TrpcSharp.Protocol.Framing
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 case TrpcDataFrameType.TrpcStreamFrame:
-                    trpcMessage = StreamMessageFramer.DecodeRequestMessage(frameHeader, messageBytes);
+                    trpcMessage = StreamMessageFramer.Decode(frameHeader, messageBytes);
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 default:
@@ -52,9 +52,9 @@ namespace TrpcSharp.Protocol.Framing
                 UnaryMessageFramer.EncodeRequestMessage(unaryMsg, PacketHeaderCodec.EncodePacketHeader, output);
             }
             
-            if (reqMessage is StreamRequestMessage streamMsg)
+            if (reqMessage is StreamMessage streamMsg)
             {
-                StreamMessageFramer.EncodeRequestMessage(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                StreamMessageFramer.Encode(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
             }
         }
 

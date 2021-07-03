@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
-using System.Linq;
+using System.Text;
+using Google.Protobuf;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing.MessageFramers
 {
     internal static class StreamMessageFramer
     {
-        public static StreamRequestMessage DecodeRequestMessage(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
+        public static StreamMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
         {
             switch (packetHeader.StreamFrameType)
             {
@@ -25,8 +26,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
             }
         }
 
-
-        static StreamRequestMessage DecodeDataMessage(uint streamId, ReadOnlySequence<byte> bytes)
+        static StreamMessage DecodeDataMessage(uint streamId, ReadOnlySequence<byte> bytes)
         {
             return new StreamDataMessage
             {
@@ -35,7 +35,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
             };
         }
 
-        static StreamRequestMessage DecodeInitMessage(uint streamId, ReadOnlySequence<byte> bytes)
+        static StreamMessage DecodeInitMessage(uint streamId, ReadOnlySequence<byte> bytes)
         {
             var meta = TrpcStreamInitMeta.Parser.ParseFrom(bytes);
             var decodedMessage = new StreamInitMessage
@@ -55,7 +55,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                     Callee = meta.RequestMeta.Callee?.ToStringUtf8(),
                     Func = meta.RequestMeta.Func?.ToStringUtf8(),
                     MessageType = (TrpcMessageType) meta.RequestMeta.MessageType,
-                    TransInfo = meta.RequestMeta.TransInfo?.ToDictionary(i => i.Key, i => i.Value.Memory),
+                    AdditionalData = meta.RequestMeta.TransInfo.ToAdditionalData(),
                 };
                 decodedMessage.RequestMeta = requestMeta;
             }
@@ -73,7 +73,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
             return decodedMessage;
         }
 
-        static StreamRequestMessage DecodeFeedbackMessage(uint streamId, ReadOnlySequence<byte> bytes)
+        static StreamMessage DecodeFeedbackMessage(uint streamId, ReadOnlySequence<byte> bytes)
         {
             var meta = TrpcStreamFeedBackMeta.Parser.ParseFrom(bytes);
             return new StreamFeedbackMessage{
@@ -82,7 +82,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
             };
         }
 
-        static StreamRequestMessage DecodeCloseMessage(uint streamId, ReadOnlySequence<byte> bytes)
+        static StreamMessage DecodeCloseMessage(uint streamId, ReadOnlySequence<byte> bytes)
         {
             var meta = TrpcStreamCloseMeta.Parser.ParseFrom(bytes);
 
@@ -90,17 +90,117 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
             {
                 StreamId = streamId,
                 CloseType = (TrpcStreamCloseType) meta.CloseType,
-                RetCode = meta.Ret,
+                ReturnCode = meta.Ret,
                 FuncCode = meta.FuncRet,
                 Message = meta.Msg?.ToStringUtf8(),
                 MessageType = (TrpcMessageType) meta.MessageType,
-                TransInfo = meta.TransInfo?.ToDictionary(i => i.Key, i => i.Value.Memory),
+                AdditionalData = meta.TransInfo.ToAdditionalData(),
             };
         }
     
-        public static void EncodeRequestMessage(StreamRequestMessage streamMsg, Func<PacketHeader, byte[]> encodePacketHeader, IBufferWriter<byte> output)
+        public static void Encode(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, IBufferWriter<byte> output)
         {
-            throw new NotImplementedException();
+            IMessage metaMessage = null;
+            Stream dataMsgBody = null;
+            switch (streamMsg)
+            {
+                case StreamDataMessage dataMsg:
+                    dataMsgBody = dataMsg.Data;
+                    break;
+                case StreamInitMessage initMsg:
+                    metaMessage = ComposeTrpcInitMeta(initMsg);
+                    break;
+                case StreamFeedbackMessage feedbackMsg:
+                    metaMessage = new TrpcStreamFeedBackMeta
+                    {
+                        WindowSizeIncrement = feedbackMsg.WindowSizeIncrement
+                    };
+                    break;
+                case StreamCloseMessage closeMsg:
+                    metaMessage = ComposeTrpcCloseMeta(closeMsg);
+                    break;
+            }
+
+            var msgLength = (dataMsgBody?.Length ?? 0) + (metaMessage?.CalculateSize() ?? 0);
+            var totalLength =  PacketHeaderPositions.FrameHeader_TotalLength + msgLength;
+            if (totalLength > uint.MaxValue)
+            {
+                throw new InvalidDataException("Message too large");
+            }
+            
+            var frameHeader = new PacketHeader
+            {
+                Magic = (ushort) TrpcMagic.Value,
+                FrameType = TrpcDataFrameType.TrpcStreamFrame,
+                StreamFrameType = streamMsg.StreamFrameType,
+                MessageHeaderSize = 0,
+                PacketTotalSize = (uint) totalLength,
+                StreamId = streamMsg.StreamId,
+            };
+            var headerBytes = frameHeaderEncoder(frameHeader);
+            
+            output.Write(headerBytes);
+            metaMessage?.WriteTo(output);
+            dataMsgBody?.WriteTo(output);
+        }
+
+        static IMessage ComposeTrpcInitMeta(StreamInitMessage initMsg)
+        {
+            var meta = new TrpcStreamInitMeta
+            {
+                ContentType = (uint) initMsg.ContentType,
+                ContentEncoding = (uint) initMsg.ContentEncoding,
+                InitWindowSize = initMsg.InitWindowSize
+            };
+            if (initMsg.RequestMeta != null)
+            {
+                meta.RequestMeta = new TrpcStreamInitRequestMeta
+                {
+                    Caller = initMsg.RequestMeta.Caller?.ToByteString(),
+                    Callee = initMsg.RequestMeta.Callee?.ToByteString(),
+                    Func = initMsg.RequestMeta.Func?.ToByteString(),
+                    MessageType = (uint) initMsg.RequestMeta.MessageType
+                };
+                if (initMsg.RequestMeta.AdditionalData != null)
+                {
+                    foreach (var key in initMsg.RequestMeta.AdditionalData.Keys)
+                    {
+                        var item = initMsg.RequestMeta.AdditionalData[key].AsBytes();
+                        meta.RequestMeta.TransInfo[key] = ByteString.CopyFrom(item.Span);
+                    }
+                }
+            }
+            if (initMsg.ResponseMeta != null)
+            {
+                meta.ResponseMeta = new TrpcStreamInitResponseMeta
+                {
+                    Ret = (int)initMsg.ResponseMeta.ReturnCode,
+                     ErrorMsg =  initMsg.ResponseMeta.ErrorMessage?.ToByteString(),
+                };
+            }
+            return meta;
+        }
+
+        static TrpcStreamCloseMeta ComposeTrpcCloseMeta(StreamCloseMessage closeMsg)
+        {
+            var meta = new TrpcStreamCloseMeta
+            {
+                CloseType = (int) closeMsg.CloseType,
+                Ret = closeMsg.ReturnCode,
+                FuncRet = closeMsg.FuncCode,
+                Msg = closeMsg.Message == null ? null : ByteString.CopyFrom(Encoding.UTF8.GetBytes(closeMsg.Message)),
+                MessageType = (uint) closeMsg.MessageType,
+            };
+            if (closeMsg.AdditionalData != null)
+            {
+                foreach (var key in closeMsg.AdditionalData.Keys)
+                {
+                    var item = closeMsg.AdditionalData[key].AsBytes();
+                    meta.TransInfo[key] = ByteString.CopyFrom(item.Span);
+                }
+            }
+
+            return meta;
         }
     }
 }
