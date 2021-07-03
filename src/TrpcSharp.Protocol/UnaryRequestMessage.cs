@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using TrpcSharp.Protocol.Framing;
 using TrpcSharp.Protocol.Standard;
 
@@ -21,7 +22,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 调用类型
         ///</summary>
-        public TrpcCallType CallType { get; set; }
+        public TrpcCallType CallType { get; set; } = TrpcCallType.TrpcUnaryCall;
 
         ///<summary>
         /// 主调服务的路由名称
@@ -41,12 +42,12 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 框架信息透传的消息类型
         ///</summary>
-        public TrpcMessageType MessageType { get; set; }
+        public TrpcMessageType MessageType { get; set; } = TrpcMessageType.TrpcDefault;
 
         ///<summary>
         /// 附加数据 trans_info
         ///</summary>
-        public Dictionary<string, ReadOnlyMemory<byte>> TransInfo { get; set; }
+        public IReadOnlyDictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
 
         ///<summary>
         /// 请求数据的序列化类型
@@ -56,7 +57,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 请求数据使用的压缩方式
         ///</summary>
-        public TrpcCompressType ContentEncoding { get; set; }
+        public TrpcCompressType ContentEncoding { get; set; } = TrpcCompressType.TrpcDefaultCompress;
 
         ///<summary>
         /// 从请求中收到的数据
@@ -67,5 +68,32 @@ namespace TrpcSharp.Protocol
     public class UnaryResponseMessage
     {
 
+    }
+
+    public sealed class TrpcAdditionalData
+    {
+        private readonly ReadOnlyMemory<byte> _mem;
+
+        public TrpcAdditionalData(string strValue)
+        {
+            if (strValue != null)
+            {
+                _mem = Encoding.UTF8.GetBytes(strValue);
+            }
+        }
+
+        public TrpcAdditionalData(byte[] bytes) : this((ReadOnlyMemory<byte>) bytes)
+        {
+        }
+
+        public TrpcAdditionalData(ReadOnlyMemory<byte> bytes)
+        {
+            _mem = bytes;
+        }
+
+
+        public string AsString() => Encoding.UTF8.GetString(_mem.Span);
+
+        public ReadOnlyMemory<byte> AsBytes() => _mem;
     }
 }

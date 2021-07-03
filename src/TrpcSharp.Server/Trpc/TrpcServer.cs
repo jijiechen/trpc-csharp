@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
+using System.IO.Pipelines;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -38,18 +40,23 @@ namespace TrpcSharp.Server.Trpc
 
             public override async Task OnConnectedAsync(ConnectionContext connection)
             {
-                var input = connection.Transport.Input;
                 try
                 {
                     while (!connection.ConnectionClosed.IsCancellationRequested)
                     {
+                        var input = connection.Transport.Input;
                         var result = await input.ReadAsync();
                         var buffer = result.Buffer;
 
-                        if (_framer.TryParseMessage(ref buffer, out var message, out SequencePosition consumed,
+                        if (_framer.TryReadRequestMessage(ref buffer, out var message, out SequencePosition consumed, 
                             out SequencePosition examined))
                         {
-                            ProcessMessage(message);
+                            ProcessMessage(message, connection.Transport.Output);
+                        }
+                        
+                        if (result.IsCompleted)
+                        {
+                            break;
                         }
 
                         input.AdvanceTo(consumed, examined);
@@ -67,7 +74,7 @@ namespace TrpcSharp.Server.Trpc
                 }
             }
 
-            private void ProcessMessage(ITrpcRequestMessage trpcMessage)
+            private void ProcessMessage(ITrpcRequestMessage trpcMessage, PipeWriter transportOutput)
             {
                 switch (trpcMessage)
                 {
@@ -78,6 +85,15 @@ namespace TrpcSharp.Server.Trpc
                         Console.WriteLine($"Stream message {streamMessage.StreamFrameType} {streamMessage.StreamId} has been well received.");
                         break;
                 }
+                
+                
+            }
+            
+            
+            public void SendPacketAsync(PipeWriter transportOutput, ITrpcResponseMessage responseMessage)
+            {
+                var buffer = _framer.WriteResponseMessage(responseMessage);
+                transportOutput.Write(buffer.Span);
             }
         }
     }

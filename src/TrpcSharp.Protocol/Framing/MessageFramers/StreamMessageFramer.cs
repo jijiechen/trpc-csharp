@@ -1,27 +1,27 @@
-﻿using System.Buffers;
+﻿using System;
+using System.Buffers;
 using System.IO;
 using System.Linq;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing.MessageFramers
 {
-    internal class StreamMessageFramer
+    internal static class StreamMessageFramer
     {
-
-        public static StreamRequestMessage DecodeRequestMessage(FrameHeader frameHeader, ReadOnlySequence<byte> messageBytes)
+        public static StreamRequestMessage DecodeRequestMessage(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
         {
-            switch (frameHeader.StreamFrameType)
+            switch (packetHeader.StreamFrameType)
             {
                 case TrpcStreamFrameType.TrpcStreamFrameData:
-                    return DecodeDataMessage(frameHeader.StreamId, messageBytes);
+                    return DecodeDataMessage(packetHeader.StreamId, messageBytes);
                 case TrpcStreamFrameType.TrpcStreamFrameInit:
-                    return DecodeInitMessage(frameHeader.StreamId, messageBytes);
+                    return DecodeInitMessage(packetHeader.StreamId, messageBytes);
                 case TrpcStreamFrameType.TrpcStreamFrameFeedback:
-                    return DecodeFeedbackMessage(frameHeader.StreamId, messageBytes);
+                    return DecodeFeedbackMessage(packetHeader.StreamId, messageBytes);
                 case TrpcStreamFrameType.TrpcStreamFrameClose:
-                    return DecodeCloseMessage(frameHeader.StreamId, messageBytes);
+                    return DecodeCloseMessage(packetHeader.StreamId, messageBytes);
                 default:
-                    throw new InvalidDataException($"Not supported tRPC frame type:{(byte)frameHeader.StreamFrameType}");
+                    throw new InvalidDataException($"Not supported tRPC frame type:{(byte)packetHeader.StreamFrameType}");
             }
         }
 
@@ -97,6 +97,10 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                 TransInfo = meta.TransInfo?.ToDictionary(i => i.Key, i => i.Value.Memory),
             };
         }
-
+    
+        public static void EncodeRequestMessage(StreamRequestMessage streamMsg, Func<PacketHeader, byte[]> encodePacketHeader, IBufferWriter<byte> output)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
