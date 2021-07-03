@@ -1,14 +1,27 @@
 ﻿using System;
 using System.Buffers;
-using TrpcSharp.Protocol.Framing.MessageFramers;
+using System.IO;
+using TrpcSharp.Protocol.Framing.MessageCodecs;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing
 {
     public class DefaultTrpcPacketFramer : ITrpcPacketFramer
     {
-        public bool TryReadRequestMessage(ref ReadOnlySequence<byte> buffer, out ITrpcRequestMessage trpcMessage, 
-            out SequencePosition consumed, out SequencePosition examined)
+        public bool TryReadMessageAsClient(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, out SequencePosition consumed,
+            out SequencePosition examined)
+        {
+            return TryReadMessageCore(false, ref buffer, out trpcMessage, out consumed, out examined);
+        }
+
+        public bool TryReadMessageAsServer(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, out SequencePosition consumed,
+            out SequencePosition examined)
+        {
+            return TryReadMessageCore(true, ref buffer, out trpcMessage, out consumed, out examined);
+        }
+
+        public bool TryReadMessageCore(bool readAsServer, ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, 
+            out SequencePosition consumed, out SequencePosition examined) 
         {
             examined = consumed = buffer.Start;
             var hasHeader = PacketHeaderCodec.TryDecodePacketHeader(buffer, out var frameHeader);
@@ -30,43 +43,36 @@ namespace TrpcSharp.Protocol.Framing
             switch (frameHeader.FrameType)
             {
                 case TrpcDataFrameType.TrpcUnaryFrame:
-                    trpcMessage = UnaryMessageFramer.DecodeRequestMessage(frameHeader, messageBytes);
+                    trpcMessage = readAsServer
+                        ? (ITrpcMessage)UnaryRequestMessageCodec.Decode(frameHeader, messageBytes)
+                        : UnaryResponseMessageCodec.Decode(frameHeader, messageBytes);
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 case TrpcDataFrameType.TrpcStreamFrame:
-                    trpcMessage = StreamMessageFramer.Decode(frameHeader, messageBytes);
+                    trpcMessage = StreamMessageCodec.Decode(frameHeader, messageBytes);
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 default:
-                    // should not reach here!
-                    examined = buffer.End;
-                    trpcMessage = null;
-                    return false;
+                    throw new InvalidDataException($"Unsupported tRPC data frame type: {frameHeader.FrameType}");
             }
         }
 
-        public void WriteRequestMessage(ITrpcRequestMessage reqMessage, IBufferWriter<byte> output)
+        public void WriteMessage(ITrpcMessage reqMessage, IBufferWriter<byte> output)
         {
-            if (reqMessage is UnaryRequestMessage unaryMsg)
+            switch (reqMessage)
             {
-                UnaryMessageFramer.EncodeRequestMessage(unaryMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                case UnaryRequestMessage unaryReqMsg:
+                    UnaryRequestMessageCodec.Encode(unaryReqMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    break;
+                case UnaryResponseMessage unaryRespMsg:
+                    UnaryResponseMessageCodec.Encode(unaryRespMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    break;
+                case StreamMessage streamMsg:
+                    StreamMessageCodec.Encode(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    break;
+                default:
+                    throw new InvalidDataException($"Unsupported tRPC message type: {reqMessage.GetType()}");
             }
-            
-            if (reqMessage is StreamMessage streamMsg)
-            {
-                StreamMessageFramer.Encode(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
-            }
-        }
-
-        public bool TryReadResponseMessage(ref ReadOnlySequence<byte> buffer, out ITrpcResponseMessage trpcMessage,
-            out SequencePosition consumed, out SequencePosition examined)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void WriteResponseMessage(ITrpcResponseMessage respMessage, IBufferWriter<byte> output)
-        {
-            throw new NotImplementedException();
         }
     }
 }

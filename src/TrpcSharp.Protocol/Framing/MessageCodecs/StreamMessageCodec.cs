@@ -5,9 +5,9 @@ using System.Text;
 using Google.Protobuf;
 using TrpcSharp.Protocol.Standard;
 
-namespace TrpcSharp.Protocol.Framing.MessageFramers
+namespace TrpcSharp.Protocol.Framing.MessageCodecs
 {
-    internal static class StreamMessageFramer
+    internal static class StreamMessageCodec
     {
         public static StreamMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
         {
@@ -152,6 +152,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                 ContentEncoding = (uint) initMsg.ContentEncoding,
                 InitWindowSize = initMsg.InitWindowSize
             };
+            
             if (initMsg.RequestMeta != null)
             {
                 meta.RequestMeta = new TrpcStreamInitRequestMeta
@@ -161,15 +162,9 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                     Func = initMsg.RequestMeta.Func?.ToByteString(),
                     MessageType = (uint) initMsg.RequestMeta.MessageType
                 };
-                if (initMsg.RequestMeta.AdditionalData != null)
-                {
-                    foreach (var key in initMsg.RequestMeta.AdditionalData.Keys)
-                    {
-                        var item = initMsg.RequestMeta.AdditionalData[key].AsBytes();
-                        meta.RequestMeta.TransInfo[key] = ByteString.CopyFrom(item.Span);
-                    }
-                }
+                initMsg.RequestMeta.AdditionalData?.CopyTo(meta.RequestMeta.TransInfo);
             }
+            
             if (initMsg.ResponseMeta != null)
             {
                 meta.ResponseMeta = new TrpcStreamInitResponseMeta
@@ -191,15 +186,7 @@ namespace TrpcSharp.Protocol.Framing.MessageFramers
                 Msg = closeMsg.Message == null ? null : ByteString.CopyFrom(Encoding.UTF8.GetBytes(closeMsg.Message)),
                 MessageType = (uint) closeMsg.MessageType,
             };
-            if (closeMsg.AdditionalData != null)
-            {
-                foreach (var key in closeMsg.AdditionalData.Keys)
-                {
-                    var item = closeMsg.AdditionalData[key].AsBytes();
-                    meta.TransInfo[key] = ByteString.CopyFrom(item.Span);
-                }
-            }
-
+            closeMsg.AdditionalData?.CopyTo(meta.TransInfo);
             return meta;
         }
     }

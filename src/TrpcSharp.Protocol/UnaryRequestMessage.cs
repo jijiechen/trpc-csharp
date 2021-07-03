@@ -2,12 +2,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using TrpcSharp.Protocol.Framing;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol
 {
-    public class UnaryRequestMessage : ITrpcRequestMessage
+    public class UnaryRequestMessage : ITrpcMessage
     {
         ///<summary>
         /// 框架生成的请求序列号
@@ -45,8 +44,11 @@ namespace TrpcSharp.Protocol
         public TrpcMessageType MessageType { get; set; } = TrpcMessageType.TrpcDefault;
 
         ///<summary>
-        /// 附加数据 trans_info
+        /// 附加数据
         ///</summary>
+        /// <remarks>
+        /// tRPC: trans_info
+        /// </remarks>
         public IReadOnlyDictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
 
         ///<summary>
@@ -65,21 +67,18 @@ namespace TrpcSharp.Protocol
         public Stream Data { get; set; }
     }
 
-    public class UnaryResponseMessage
-    {
-
-    }
-
     public sealed class TrpcAdditionalData
     {
         private readonly ReadOnlyMemory<byte> _mem;
 
         public TrpcAdditionalData(string strValue)
         {
-            if (strValue != null)
+            if (strValue == null)
             {
-                _mem = Encoding.UTF8.GetBytes(strValue);
+                throw new ArgumentNullException(nameof(strValue));
             }
+
+            _mem = Encoding.UTF8.GetBytes(strValue);
         }
 
         public TrpcAdditionalData(byte[] bytes) : this((ReadOnlyMemory<byte>) bytes)

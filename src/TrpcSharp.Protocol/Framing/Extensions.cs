@@ -28,6 +28,15 @@ namespace TrpcSharp.Protocol.Framing
                            i=> new TrpcAdditionalData(i.Value.Memory));
         }
 
+        public static void CopyTo(this IReadOnlyDictionary<string, TrpcAdditionalData> additionalData, MapField<string, ByteString> pbMap)
+        {
+            foreach (var key in additionalData.Keys)
+            {
+                var item = additionalData[key].AsBytes();
+                pbMap[key] = ByteString.CopyFrom(item.Span);
+            }
+        }
+
         public static void WriteTo(this Stream inputStream, IBufferWriter<byte> output)
         {
             const int bufferSize = 4096;

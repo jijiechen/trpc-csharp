@@ -1,0 +1,74 @@
+﻿using System;
+using System.Buffers;
+using System.IO;
+using Google.Protobuf;
+using TrpcSharp.Protocol.Standard;
+
+namespace TrpcSharp.Protocol.Framing.MessageCodecs
+{
+    internal static class UnaryResponseMessageCodec
+    {
+        public static UnaryResponseMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
+        {
+            var headerBytes = messageBytes.Slice(0, packetHeader.MessageHeaderSize);
+            var bodyBytes = messageBytes.Slice(packetHeader.MessageHeaderSize, 
+                packetHeader.PacketTotalSize - PacketHeaderPositions.FrameHeader_TotalLength - packetHeader.MessageHeaderSize);
+            
+            var respHeader = ResponseProtocol.Parser.ParseFrom(headerBytes);
+            var bodyStream = new ReadOnlySequenceStream(bodyBytes);
+            return new UnaryResponseMessage
+            {
+                RequestId = respHeader.RequestId,
+                ReturnCode = (TrpcRetCode)respHeader.Ret,
+                FuncCode = respHeader.FuncRet,
+                CallType = (TrpcCallType)respHeader.CallType,
+                ErrorMessage =  respHeader.ErrorMsg?.ToStringUtf8(),
+                AdditionalData = respHeader.TransInfo.ToAdditionalData(),
+                MessageType = (TrpcMessageType)respHeader.MessageType,
+                ContentType = (TrpcContentEncodeType)respHeader.ContentType,
+                ContentEncoding = (TrpcCompressType)respHeader.ContentEncoding,
+                Data =  bodyStream
+            };
+        }
+
+        public static void Encode(UnaryResponseMessage respMessage, 
+            Func<PacketHeader, byte[]> frameHeaderEncoder, IBufferWriter<byte> output)
+        {
+            var msgHeader = new ResponseProtocol
+            {
+                Version = (uint)TrpcProtoVersion.TrpcProtoV1,
+                RequestId = respMessage.RequestId,
+                CallType = (uint)respMessage.CallType,
+                Ret = (int)respMessage.ReturnCode,
+                FuncRet = respMessage.FuncCode,
+                ErrorMsg = respMessage.ErrorMessage?.ToByteString(),
+                MessageType = (uint)respMessage.MessageType,
+                ContentType = (uint)respMessage.ContentType,
+                ContentEncoding = (uint)respMessage.ContentEncoding,
+            };
+            respMessage.AdditionalData?.CopyTo(msgHeader.TransInfo);
+
+            var msgHeaderLength = msgHeader.CalculateSize();
+            var packageTotalLength = PacketHeaderPositions.FrameHeader_TotalLength + msgHeaderLength + (respMessage.Data?.Length ?? 0);
+            if(msgHeaderLength > ushort.MaxValue || packageTotalLength > uint.MaxValue)
+            {
+                throw new InvalidDataException("Message too large");
+            }
+
+            var frameHeader = new PacketHeader
+            {
+                Magic = (ushort) TrpcMagic.Value,
+                FrameType = TrpcDataFrameType.TrpcUnaryFrame,
+                StreamFrameType = TrpcStreamFrameType.TrpcUnary,
+                MessageHeaderSize = (ushort) msgHeaderLength,
+                PacketTotalSize = (uint) packageTotalLength,
+                StreamId = 0,
+            };
+            var headerBytes = frameHeaderEncoder(frameHeader);
+            
+            output.Write(headerBytes);
+            msgHeader.WriteTo(output);
+            respMessage.Data?.WriteTo(output);
+        }
+    }
+}

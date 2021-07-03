@@ -11,7 +11,6 @@ using TrpcSharp.Protocol.Framing;
 
 namespace TrpcSharp.Server.Trpc
 {
-
     public class TrpcServerOptionsSetup : IConfigureOptions<KestrelServerOptions>
     {
         private readonly ServerOptions _options;
@@ -48,7 +47,7 @@ namespace TrpcSharp.Server.Trpc
                         var result = await input.ReadAsync();
                         var buffer = result.Buffer;
 
-                        if (_framer.TryReadRequestMessage(ref buffer, out var message, out SequencePosition consumed, 
+                        if (_framer.TryReadMessageAsServer(ref buffer, out var message, out SequencePosition consumed, 
                             out SequencePosition examined))
                         {
                             ProcessMessage(message, connection.Transport.Output);
@@ -74,7 +73,7 @@ namespace TrpcSharp.Server.Trpc
                 }
             }
 
-            private void ProcessMessage(ITrpcRequestMessage trpcMessage, PipeWriter transportOutput)
+            private void ProcessMessage(ITrpcMessage trpcMessage, PipeWriter transportOutput)
             {
                 switch (trpcMessage)
                 {
@@ -85,15 +84,11 @@ namespace TrpcSharp.Server.Trpc
                         Console.WriteLine($"Stream message {streamMessage.StreamFrameType} {streamMessage.StreamId} has been well received.");
                         break;
                 }
-                
-                
             }
             
-            
-            public void SendPacketAsync(PipeWriter transportOutput, ITrpcResponseMessage responseMessage)
+            public void SendPacketAsync(ITrpcMessage responseMessage, PipeWriter transportOutput)
             {
-                var buffer = _framer.WriteResponseMessage(responseMessage);
-                transportOutput.Write(buffer.Span);
+                _framer.WriteMessage(responseMessage, transportOutput);
             }
         }
     }

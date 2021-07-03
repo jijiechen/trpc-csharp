@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using TrpcSharp.Protocol.Framing;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol
 {
-    public abstract class StreamMessage : ITrpcRequestMessage
+    public abstract class StreamMessage : ITrpcMessage
     {
         /// <summary>
         /// 流式帧类型
@@ -43,14 +41,30 @@ namespace TrpcSharp.Protocol
         public TrpcMessageType MessageType { get; set; }
 
         ///<summary>
-        /// 附加数据 trans_info
+        /// 附加数据
         ///</summary>
+        /// <remarks>
+        /// tRPC: trans_info
+        /// </remarks>
         public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
     }
 
     public class StreamInitResponseMeta
     {
+        /// <summary>
+        /// 请求在框架层的错误返回码
+        /// </summary>
+        /// <remarks>
+        /// tRPC: Ret
+        /// </remarks>
         public TrpcRetCode ReturnCode { get; set; }
+        /// <summary>
+        /// 调用结果信息描述
+        /// 失败的时候用
+        /// </summary>
+        /// <remarks>
+        /// tRPC: ErrorMsg
+        /// </remarks>
         public string ErrorMessage  { get; set; }
     }
     
@@ -62,12 +76,12 @@ namespace TrpcSharp.Protocol
         }
         
         /// <summary>
-        /// trpc流式init头的请求元信息
+        /// trpc 流式 init 调用中的请求信息
         /// </summary>
         public StreamInitRequestMeta RequestMeta { get; set; }
 
         /// <summary>
-        /// trpc流式init头的响应元信息
+        /// trpc 流式 init 调用中的响应信息
         /// </summary>
         public StreamInitResponseMeta ResponseMeta { get; set; }
 
@@ -128,6 +142,9 @@ namespace TrpcSharp.Protocol
         /// <summary>
         /// close 返回码
         /// </summary>
+        /// <remarks>
+        /// tRPC: Ret
+        /// </remarks>
         public int ReturnCode { get; set; }
 
         /// <summary>
@@ -138,9 +155,20 @@ namespace TrpcSharp.Protocol
         /// <summary>
         /// 业务接口的返回码
         /// </summary>
+        /// <remarks>
+        /// tRPC: FuncRet
+        /// </remarks>
         public int FuncCode { get; set; }
-
+        ///<summary>
+        /// 框架信息透传的消息类型
+        ///</summary>
         public TrpcMessageType MessageType { get; set; }
+        ///<summary>
+        /// 附加数据
+        ///</summary>
+        /// <remarks>
+        /// tRPC: trans_info
+        /// </remarks>
         public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
     }
 }
