@@ -9,7 +9,11 @@ namespace TrpcSharp.Server
         {
             app.Run(async ctx =>
             {
-                Console.WriteLine($"New invocation: {ctx.Id}");
+                var unaryCtx = (ctx as UnaryTrpcContext);
+                
+                Console.WriteLine($"New invocation: {ctx.Id}, callee: {unaryCtx.UnaryRequest.Callee}");
+                
+                // ctx.UnaryResponse
             });
         }
     }

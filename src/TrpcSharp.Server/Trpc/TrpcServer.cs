@@ -53,7 +53,13 @@ namespace TrpcSharp.Server.Trpc
                         if (_framer.TryReadMessageAsServer(ref buffer, out var message, out SequencePosition consumed,
                             out SequencePosition examined))
                         {
+                            // todo: start & dispose a DI scope
                             var trpcContext = _application.CreateTrpcContext(message, connection);
+                            if (trpcContext == null)
+                            {
+                                // a context can not be created, abort
+                                break;
+                            }
                             _application.EnqueueRequest(trpcContext);
                         }
 

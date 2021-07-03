@@ -41,7 +41,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 CallType = (uint)respMessage.CallType,
                 Ret = (int)respMessage.ReturnCode,
                 FuncRet = respMessage.FuncCode,
-                ErrorMsg = respMessage.ErrorMessage?.ToByteString(),
+                ErrorMsg = respMessage.ErrorMessage.ToByteString(),
                 MessageType = (uint)respMessage.MessageType,
                 ContentType = (uint)respMessage.ContentType,
                 ContentEncoding = (uint)respMessage.ContentEncoding,

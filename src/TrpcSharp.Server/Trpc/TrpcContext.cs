@@ -1,21 +1,47 @@
-﻿using System.IO.Pipelines;
+﻿using System.IO;
+using System.IO.Pipelines;
+using System.Threading.Tasks;
 using TrpcSharp.Protocol;
+using TrpcSharp.Protocol.Framing;
 
 namespace TrpcSharp.Server.Trpc
 {
-    public class TrpcContext
+    public abstract class TrpcContext
     {
-        public StreamMessage StreamMessage { get; set; }
-        
-        public UnaryRequestMessage UnaryRequest { get; set; }
-        
-        public UnaryResponseMessage UnaryResponse { get; set; }
-        
-        public bool IsHandled { get; set; }
-        
         public ContextId Id { get; set; }
         public IDuplexPipe Transport { get; set; }
     }
+
+    public class UnaryTrpcContext : TrpcContext
+    {
+        public UnaryRequestMessage UnaryRequest { get; set; }
+        
+        public UnaryResponseMessage UnaryResponse { get; set; }
+    }
+    
+    public class StreamTrpcContext: TrpcContext
+    {  
+        private readonly ITrpcPacketFramer _framer;
+        internal StreamTrpcContext(ITrpcPacketFramer framer)
+        {
+            _framer = framer;
+        }
+        public StreamMessage StreamMessage { get; set; }
+
+        public async Task Push(Stream data)
+        {
+            var streamMessage = new StreamDataMessage
+            {
+                StreamId = StreamMessage.StreamId,
+                Data = data
+            };
+            await Task.Run(() =>
+            {
+                _framer.WriteMessage(streamMessage, Transport.Output);
+            });
+        }
+    }
+
 
     public struct ContextId
     {
@@ -24,7 +50,7 @@ namespace TrpcSharp.Server.Trpc
         
         public override string ToString()
         {
-            var prefix = Type == ContextType.UnaryRequest ? "unary-" : "stream-";
+            var prefix = Type == ContextType.UnaryRequest ? "unary" : "stream";
             return $"{prefix}-{this.Id}";
         }
     }

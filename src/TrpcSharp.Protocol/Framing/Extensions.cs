@@ -13,7 +13,7 @@ namespace TrpcSharp.Protocol.Framing
     {
         public static ByteString ToByteString(this string str)
         {
-            return ByteString.CopyFrom(Encoding.UTF8.GetBytes(str));
+            return str == null ? ByteString.Empty : ByteString.CopyFrom(Encoding.UTF8.GetBytes(str));
         }
 
         public static Dictionary<string, TrpcAdditionalData> ToAdditionalData(this MapField<string, ByteString> transInfo)

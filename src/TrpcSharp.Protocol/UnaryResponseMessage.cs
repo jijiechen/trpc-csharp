@@ -45,7 +45,8 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public IReadOnlyDictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
+        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
+            new Dictionary<string, TrpcAdditionalData>();
 
         ///<summary>
         /// 框架信息透传的消息类型

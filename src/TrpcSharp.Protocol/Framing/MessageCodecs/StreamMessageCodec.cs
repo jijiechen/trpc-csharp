@@ -157,9 +157,9 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             {
                 meta.RequestMeta = new TrpcStreamInitRequestMeta
                 {
-                    Caller = initMsg.RequestMeta.Caller?.ToByteString(),
-                    Callee = initMsg.RequestMeta.Callee?.ToByteString(),
-                    Func = initMsg.RequestMeta.Func?.ToByteString(),
+                    Caller = initMsg.RequestMeta.Caller.ToByteString(),
+                    Callee = initMsg.RequestMeta.Callee.ToByteString(),
+                    Func = initMsg.RequestMeta.Func.ToByteString(),
                     MessageType = (uint) initMsg.RequestMeta.MessageType
                 };
                 initMsg.RequestMeta.AdditionalData?.CopyTo(meta.RequestMeta.TransInfo);
@@ -170,7 +170,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 meta.ResponseMeta = new TrpcStreamInitResponseMeta
                 {
                     Ret = (int)initMsg.ResponseMeta.ReturnCode,
-                     ErrorMsg =  initMsg.ResponseMeta.ErrorMessage?.ToByteString(),
+                     ErrorMsg =  initMsg.ResponseMeta.ErrorMessage.ToByteString(),
                 };
             }
             return meta;
