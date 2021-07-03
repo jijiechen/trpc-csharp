@@ -53,7 +53,7 @@ namespace TrpcSharp.Protocol.Framing
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 default:
-                    throw new InvalidDataException($"Unsupported tRPC data frame type: {frameHeader.FrameType}");
+                    throw new InvalidDataException($"Unsupported tRPC frame type: {frameHeader.FrameType}");
             }
         }
 

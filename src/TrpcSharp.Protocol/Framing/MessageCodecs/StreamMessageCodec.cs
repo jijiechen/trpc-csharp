@@ -22,7 +22,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 case TrpcStreamFrameType.TrpcStreamFrameClose:
                     return DecodeCloseMessage(packetHeader.StreamId, messageBytes);
                 default:
-                    throw new InvalidDataException($"Not supported tRPC frame type:{(byte)packetHeader.StreamFrameType}");
+                    throw new InvalidDataException($"Unsupported tRPC stream frame type:{(byte)packetHeader.StreamFrameType}");
             }
         }
 

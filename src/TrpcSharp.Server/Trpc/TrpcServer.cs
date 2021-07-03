@@ -1,12 +1,10 @@
 ﻿using System;
-using System.Buffers;
 using System.IO;
-using System.IO.Pipelines;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
 
 namespace TrpcSharp.Server.Trpc
@@ -31,10 +29,15 @@ namespace TrpcSharp.Server.Trpc
         private class TrpcConnectionHandler : ConnectionHandler
         {
             private readonly ITrpcPacketFramer _framer;
+            private readonly ITrpcApplication _application;
+            private readonly ILogger<TrpcConnectionHandler> _logger;
 
-            public TrpcConnectionHandler(ITrpcPacketFramer framer)
+            public TrpcConnectionHandler(ITrpcPacketFramer framer, ITrpcApplication application, 
+                ILogger<TrpcConnectionHandler> logger)
             {
                 _framer = framer;
+                _application = application;
+                _logger = logger;
             }
 
             public override async Task OnConnectedAsync(ConnectionContext connection)
@@ -47,12 +50,13 @@ namespace TrpcSharp.Server.Trpc
                         var result = await input.ReadAsync();
                         var buffer = result.Buffer;
 
-                        if (_framer.TryReadMessageAsServer(ref buffer, out var message, out SequencePosition consumed, 
+                        if (_framer.TryReadMessageAsServer(ref buffer, out var message, out SequencePosition consumed,
                             out SequencePosition examined))
                         {
-                            ProcessMessage(message, connection.Transport.Output);
+                            var trpcContext = _application.CreateTrpcContext(message, connection);
+                            _application.EnqueueRequest(trpcContext);
                         }
-                        
+
                         if (result.IsCompleted)
                         {
                             break;
@@ -61,35 +65,25 @@ namespace TrpcSharp.Server.Trpc
                         input.AdvanceTo(consumed, examined);
                     }
                 }
-                catch(ConnectionResetException closeEx)
+                catch (InvalidDataException dataEx)
                 {
-                    // todo: connection closed
+                    _logger.LogDebug(EventIds.ProtocolError, dataEx.Message);
+                }
+                catch (ConnectionResetException closeEx)
+                {
+                    _logger.LogDebug(EventIds.ConnectionReset, closeEx.Message);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(EventIds.UnknownConnectionError, ex.Message);
                 }
                 finally
                 {
-                    // Complete the transport PipeReader and PipeWriter after calling into application code
                     await connection.Transport.Input.CompleteAsync();
                     await connection.Transport.Output.CompleteAsync();
                 }
             }
-
-            private void ProcessMessage(ITrpcMessage trpcMessage, PipeWriter transportOutput)
-            {
-                switch (trpcMessage)
-                {
-                    case UnaryRequestMessage unaryMessage:
-                        Console.WriteLine($"Unary request {unaryMessage.RequestId} has been well received.");
-                        break;
-                    case StreamMessage streamMessage:
-                        Console.WriteLine($"Stream message {streamMessage.StreamFrameType} {streamMessage.StreamId} has been well received.");
-                        break;
-                }
-            }
             
-            public void SendPacketAsync(ITrpcMessage responseMessage, PipeWriter transportOutput)
-            {
-                _framer.WriteMessage(responseMessage, transportOutput);
-            }
         }
     }
 }
