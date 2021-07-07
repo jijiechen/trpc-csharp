@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.IO.Pipelines;
 using System.Threading.Tasks;
 using TrpcSharp.Protocol;
@@ -9,16 +10,23 @@ namespace TrpcSharp.Server.Trpc
 {
     public abstract class TrpcContext
     {
-        public ContextId Id { get; set; }
-        public IDuplexPipe Transport { get; set; }
+        public ContextId Identifier { get; protected set; }
+        public IConnection Connection { get; set; }
+        public IServiceProvider Services { get; set; }
+        
+        public override string ToString()
+        {
+            return Identifier.ToString();
+        }
     }
 
     public class UnaryTrpcContext : TrpcContext
     {       
         private readonly ITrpcPacketFramer _framer;
         private volatile bool _hasResponded = false;
-        internal UnaryTrpcContext(ITrpcPacketFramer framer)
+        internal UnaryTrpcContext(uint requestId, ITrpcPacketFramer framer)
         {
+            Identifier = new ContextId{ Type = ContextType.UnaryRequest, Id =  requestId};
             _framer = framer;
         }
 
@@ -35,15 +43,16 @@ namespace TrpcSharp.Server.Trpc
                 return;
             }
             
-            await _framer.WriteMessage(UnaryResponse, Transport.Output.AsStream(leaveOpen: true));
+            await _framer.WriteMessageAsync(UnaryResponse, Connection.Transport.Output.AsStream(leaveOpen: true));
         }
     }
     
     public class StreamTrpcContext: TrpcContext
     {  
         private readonly ITrpcPacketFramer _framer;
-        internal StreamTrpcContext(ITrpcPacketFramer framer)
+        internal StreamTrpcContext(uint streamId, ITrpcPacketFramer framer)
         {
+            Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId};
             _framer = framer;
         }
         public StreamMessage StreamMessage { get; set; }
@@ -56,7 +65,7 @@ namespace TrpcSharp.Server.Trpc
                 Data = data
             };
             
-            await _framer.WriteMessage(streamMessage, Transport.Output.AsStream(leaveOpen: true));
+            await _framer.WriteMessageAsync(streamMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
         }
     }
 
@@ -68,7 +77,7 @@ namespace TrpcSharp.Server.Trpc
         
         public override string ToString()
         {
-            var prefix = Type == ContextType.UnaryRequest ? "unary" : "stream";
+            var prefix = Type == ContextType.Streaming ? "stream" : "unary";
             return $"{prefix}-{this.Id}";
         }
     }
@@ -77,6 +86,6 @@ namespace TrpcSharp.Server.Trpc
     public enum ContextType
     {
         UnaryRequest = 0,
-        StreamConnection = 1,
+        Streaming = 1,
     }
 }

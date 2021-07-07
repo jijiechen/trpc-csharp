@@ -42,53 +42,79 @@ namespace TrpcSharp.Server.Trpc
 
             public override async Task OnConnectedAsync(ConnectionContext connection)
             {
-                try
+                var input = connection.Transport.Input;
+                while (true)
                 {
-                    while (!connection.ConnectionClosed.IsCancellationRequested)
+                    var result = await input.ReadAsync();
+                    var buffer = result.Buffer;
+
+                    try
                     {
-                        var input = connection.Transport.Input;
-                        var result = await input.ReadAsync();
-                        var buffer = result.Buffer;
-
-                        Console.WriteLine($"Output hashcode 1: {connection.Transport.Output.GetHashCode()}");
-                        
-                        if (_framer.TryReadMessageAsServer(ref buffer, out var message, out SequencePosition consumed,
-                            out SequencePosition examined))
-                        {
-                            // todo: start & dispose a DI scope
-                            var trpcContext = _application.CreateTrpcContext(message, connection);
-                            if (trpcContext == null)
-                            {
-                                // a context can not be created, abort
-                                break;
-                            }
-                            _application.EnqueueRequest(trpcContext);
-                        }
-
-                        if (result.IsCompleted)
+                        if (result.IsCanceled)
                         {
                             break;
                         }
 
-                        input.AdvanceTo(consumed, examined);
+                        if (!buffer.IsEmpty)
+                        {
+                            var advanced = false;
+                            SequencePosition consumed;
+                            SequencePosition examined;
+                            while (_framer.TryReadMessageAsServer(ref buffer, out var message,
+                                out consumed, out examined))
+                            {
+                                input.AdvanceTo(consumed, examined);
+                                advanced = true;
+
+                                try
+                                {
+                                    await _application.DispatchRequestAsync(message, connection);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    // Don't treat OperationCanceledException as an error, it's basically a "control flow"
+                                    // exception to stop things from running
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(EventIds.ApplicationError, ex, "Unhandled application exception: " + ex.Message);
+                                    return;
+                                }
+                            }
+
+                            if (!advanced)
+                            {
+                                input.AdvanceTo(consumed, examined);
+                            }
+                        }
+
+                        if (result.IsCompleted)
+                        {
+                            if (!buffer.IsEmpty)
+                            {
+                                throw new InvalidDataException("Connection terminated while reading a message.");
+                            }
+
+                            break;
+                        }
                     }
-                }
-                catch (InvalidDataException dataEx)
-                {
-                    _logger.LogDebug(EventIds.ProtocolError, dataEx.Message);
-                }
-                catch (ConnectionResetException closeEx)
-                {
-                    _logger.LogDebug(EventIds.ConnectionReset, closeEx.Message);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(EventIds.UnknownConnectionError, ex.Message);
-                }
-                finally
-                {
-                    await connection.Transport.Input.CompleteAsync();
-                    await connection.Transport.Output.CompleteAsync();
+                    catch (InvalidDataException dataEx)
+                    {
+                        _logger.LogDebug(EventIds.ProtocolError, dataEx.Message);
+                    }
+                    catch (ConnectionResetException closeEx)
+                    {
+                        _logger.LogDebug(EventIds.ConnectionReset, closeEx.Message);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(EventIds.UnknownConnectionError, ex.Message);
+                    }
+                    finally
+                    {
+                        await connection.Transport.Input.CompleteAsync();
+                        await connection.Transport.Output.CompleteAsync();
+                    }
                 }
             }
             

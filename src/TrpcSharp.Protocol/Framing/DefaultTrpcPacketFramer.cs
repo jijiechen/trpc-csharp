@@ -9,14 +9,14 @@ namespace TrpcSharp.Protocol.Framing
 {
     public class DefaultTrpcPacketFramer : ITrpcPacketFramer
     {
-        public bool TryReadMessageAsClient(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, out SequencePosition consumed,
-            out SequencePosition examined)
+        public bool TryReadMessageAsClient(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
+            out SequencePosition consumed, out SequencePosition examined)
         {
             return TryReadMessageCore(false, ref buffer, out trpcMessage, out consumed, out examined);
         }
 
-        public bool TryReadMessageAsServer(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, out SequencePosition consumed,
-            out SequencePosition examined)
+        public bool TryReadMessageAsServer(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, 
+            out SequencePosition consumed, out SequencePosition examined)
         {
             return TryReadMessageCore(true, ref buffer, out trpcMessage, out consumed, out examined);
         }
@@ -58,18 +58,18 @@ namespace TrpcSharp.Protocol.Framing
             }
         }
 
-        public async Task WriteMessage(ITrpcMessage reqMessage, Stream output)
+        public async Task WriteMessageAsync(ITrpcMessage reqMessage, Stream output)
         {
             switch (reqMessage)
             {
                 case UnaryRequestMessage unaryReqMsg:
-                    await UnaryRequestMessageCodec.Encode(unaryReqMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    await UnaryRequestMessageCodec.EncodeAsync(unaryReqMsg, PacketHeaderCodec.EncodePacketHeader, output);
                     break;
                 case UnaryResponseMessage unaryRespMsg:
-                    await UnaryResponseMessageCodec.Encode(unaryRespMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    await UnaryResponseMessageCodec.EncodeAsync(unaryRespMsg, PacketHeaderCodec.EncodePacketHeader, output);
                     break;
                 case StreamMessage streamMsg:
-                    await StreamMessageCodec.Encode(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
+                    await StreamMessageCodec.EncodeAsync(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
                     break;
                 default:
                     throw new InvalidDataException($"Unsupported tRPC message type: {reqMessage.GetType()}");

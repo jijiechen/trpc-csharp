@@ -4,22 +4,23 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
-using TrpcSharp.Protocol.Standard;
+using TrpcSharp.Server.Extensions;
 
 namespace TrpcSharp.Server.Trpc
 {
     public interface ITrpcApplication
     {
-        void EnqueueRequest(TrpcContext trpcContext);
-        TrpcContext CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection);
+        Task DispatchRequestAsync(ITrpcMessage trpcMessage, ConnectionContext conn);
     }
     
     internal class TrpcApplication : ITrpcApplication, IHostedService
     {
+        private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly ITrpcApplicationBuilder _appBuilder;
         private readonly ConcurrentQueue<TrpcContext> _requestQueue;
         private TrpcRequestDelegate _requestDelegate;
@@ -27,11 +28,13 @@ namespace TrpcSharp.Server.Trpc
         private readonly ILogger<TrpcApplication> _logger;
         private volatile bool _isAppRunning = false;
 
-        public TrpcApplication(ITrpcApplicationBuilder appBuilder, ITrpcPacketFramer framer,  ILogger<TrpcApplication> logger)
+        public TrpcApplication(ITrpcApplicationBuilder appBuilder, ITrpcPacketFramer framer,
+            IServiceScopeFactory serviceScopeFactory, ILogger<TrpcApplication> logger)
         {
             _appBuilder = appBuilder;
             _trpcFramer = framer;
             _logger = logger;
+            _serviceScopeFactory = serviceScopeFactory;
             _requestQueue = new ConcurrentQueue<TrpcContext>();
         }
 
@@ -45,39 +48,72 @@ namespace TrpcSharp.Server.Trpc
         public Task StopAsync(CancellationToken cancellationToken)
         {
             _isAppRunning = false;
+            // todo: cleanup ongoing connections
             return Task.CompletedTask;
         }
 
-        public void EnqueueRequest(TrpcContext trpcContext)
+        public async Task DispatchRequestAsync(ITrpcMessage trpcMessage, ConnectionContext conn)
         {
-            _requestQueue.Enqueue(trpcContext);
-            HandleRequest();
+            var (context, scope) = CreateTrpcContext(trpcMessage, conn);
+            if (context == null)
+            {
+                _logger.LogDebug($"A tRPC context can not be created for connection {conn.ConnectionId}");
+                return;
+            }
+            
+            try
+            {
+                _logger.LogDebug($"tRPC {context.Identifier} starting in connection {conn.ConnectionId}");
+
+                if (context.Identifier.Type == ContextType.Streaming)
+                {
+                    // stream tracker!
+                    // init
+                    // close
+                }
+                else
+                {
+                    var requestHandle = _requestDelegate(context);
+                    await requestHandle.ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(EventIds.ApplicationError, ex, "tRPC Application Error");
+                // todo: send error response
+            }
+            finally
+            {
+                _logger.LogDebug($"tRPC {context.Identifier} completed in connection {conn.ConnectionId}");
+                await scope.DisposeAsync();
+            }
         }
 
-        public TrpcContext CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection)
+        private (TrpcContext, IAsyncDisposable) CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection)
         {
             if (!_isAppRunning || incomingMessage == null)
             {
-                return null;
+                return (null, null);
             }
             
+            var scope = _serviceScopeFactory.CreateAsyncScope();
             TrpcContext context = null;
             switch (incomingMessage)
             {
                 case UnaryRequestMessage unaryMsg:
-                    context = new UnaryTrpcContext(_trpcFramer)
+                    context = new UnaryTrpcContext(unaryMsg.RequestId, _trpcFramer)
                     {
-                        Transport = connection.Transport,
-                        Id = new ContextId {Type = ContextType.UnaryRequest, Id = unaryMsg.RequestId},
+                        Services = scope.ServiceProvider,
+                        Connection = new AspNetCoreConnection(connection),
                         UnaryRequest = unaryMsg,
                         UnaryResponse = CreateResponse(unaryMsg)
                     };
                     break;
                 case StreamMessage streamMsg:
-                    context = new StreamTrpcContext(_trpcFramer)
+                    context = new StreamTrpcContext(streamMsg.StreamId, _trpcFramer)
                     {
-                        Transport = connection.Transport,
-                        Id = new ContextId {Type = ContextType.StreamConnection, Id = streamMsg.StreamId},
+                        Services = scope.ServiceProvider,
+                        Connection = new AspNetCoreConnection(connection),
                         StreamMessage = streamMsg
                     };
                     break;
@@ -85,10 +121,9 @@ namespace TrpcSharp.Server.Trpc
                     throw new ApplicationException($"Unsupported tRPC message type {incomingMessage.GetType()}");
             }
             
-            _logger.LogDebug($"tRPC starting: {context.Id}");
-            return context;
+            return (context, scope);
         }
-
+        
         private static UnaryResponseMessage CreateResponse(UnaryRequestMessage unaryMsg)
         {
             var response = new UnaryResponseMessage
@@ -109,25 +144,5 @@ namespace TrpcSharp.Server.Trpc
             return response;
         }
 
-        void HandleRequest()
-        {
-            while (_requestQueue.TryDequeue(out var ctx))
-            {
-                try
-                {
-                    var requestHandle = _requestDelegate(ctx);
-                    requestHandle.ConfigureAwait(false);
-                    requestHandle.Wait();
-
-                    // todo: dispose context
-                    _logger.LogDebug($"tRPC complete: {ctx.Id}");
-                }
-                catch(Exception ex)
-                {
-                    _logger.LogError(EventIds.ApplicationError, ex, "tRPC Application Error");
-                    // todo: send error response
-                }
-            }
-        }
     }
 }

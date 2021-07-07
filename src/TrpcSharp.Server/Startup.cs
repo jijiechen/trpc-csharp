@@ -10,11 +10,11 @@ namespace TrpcSharp.Server
         {
             app.Run(async ctx =>
             {
-                Console.WriteLine($"New invocation: {ctx.Id}");
+                Console.WriteLine($"New invocation: {ctx.Identifier}");
 
                 if (ctx is UnaryTrpcContext unaryCtx)
                 {
-                    unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Id}";
+                    unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Identifier}";
                 }
                 
                 if (ctx is StreamTrpcContext streamCtx && streamCtx.StreamMessage.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameData)

@@ -99,7 +99,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             };
         }
     
-        public static async Task Encode(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
+        public static async Task EncodeAsync(StreamMessage streamMsg, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             IMessage metaMessage = null;
             Stream dataMsgBody = null;

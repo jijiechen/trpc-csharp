@@ -32,7 +32,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             };
         }
 
-        public static async Task Encode(UnaryResponseMessage respMessage, 
+        public static async Task EncodeAsync(UnaryResponseMessage respMessage, 
             Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             var msgHeader = new ResponseProtocol

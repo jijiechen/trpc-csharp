@@ -13,6 +13,6 @@ namespace TrpcSharp.Protocol.Framing
         bool TryReadMessageAsServer(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
             out SequencePosition consumed, out SequencePosition examined);
         
-        Task WriteMessage(ITrpcMessage trpcMessage, Stream output);
+        Task WriteMessageAsync(ITrpcMessage trpcMessage, Stream output);
     }
 }
