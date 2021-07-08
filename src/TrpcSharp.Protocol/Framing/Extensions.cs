@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Google.Protobuf;
 using Google.Protobuf.Collections;
 
@@ -37,26 +38,5 @@ namespace TrpcSharp.Protocol.Framing
             }
         }
 
-        public static void WriteTo(this Stream inputStream, IBufferWriter<byte> output)
-        {
-            const int bufferSize = 4096;
-            while (true)
-            {
-                var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-                var bytesRead = inputStream.Read(buffer, 0, bufferSize);
-                if (bytesRead == 0)
-                {
-                    break;
-                }
-
-                output.Write(buffer.AsSpan(0, bytesRead));
-                output.Advance(bytesRead);
-                ArrayPool<byte>.Shared.Return(buffer);
-                if (bytesRead < bufferSize)
-                {
-                    break;
-                }
-            }
-        }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.IO.Pipelines;
 using System.Threading.Tasks;
 using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
@@ -24,7 +23,7 @@ namespace TrpcSharp.Server.Trpc
     {       
         private readonly ITrpcPacketFramer _framer;
         private volatile bool _hasResponded = false;
-        internal UnaryTrpcContext(uint requestId, ITrpcPacketFramer framer)
+        public UnaryTrpcContext(uint requestId, ITrpcPacketFramer framer)
         {
             Identifier = new ContextId{ Type = ContextType.UnaryRequest, Id =  requestId};
             _framer = framer;
@@ -48,24 +47,48 @@ namespace TrpcSharp.Server.Trpc
     }
     
     public class StreamTrpcContext: TrpcContext
-    {  
+    {
+        private uint _windowSize;
         private readonly ITrpcPacketFramer _framer;
-        internal StreamTrpcContext(uint streamId, ITrpcPacketFramer framer)
+        public StreamTrpcContext(uint streamId, ITrpcPacketFramer framer)
         {
             Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId};
             _framer = framer;
         }
         public StreamMessage StreamMessage { get; set; }
 
-        public async Task Push(Stream data)
+        public void IncrementWindowSize(uint increment)
         {
+            _windowSize += increment;
+        }
+
+        public async Task<bool> WriteAsync(Stream data)
+        {
+            if (data.Length > _windowSize)
+            {
+                return false;
+            }
+            
             var streamMessage = new StreamDataMessage
             {
-                StreamId = StreamMessage.StreamId,
+                StreamId = Identifier.Id,
                 Data = data
             };
             
             await _framer.WriteMessageAsync(streamMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
+            _windowSize -= (uint)data.Length;
+            return _windowSize > 0;
+        }
+        
+        public async Task WriteAsync(StreamMessage trpcMessage)
+        {
+            if (trpcMessage is StreamDataMessage)
+            {
+                throw new InvalidOperationException(
+                    $"Please use {nameof(WriteAsync)}(Stream) overload to write this data");
+            }
+            
+            await _framer.WriteMessageAsync(trpcMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
         }
     }
 

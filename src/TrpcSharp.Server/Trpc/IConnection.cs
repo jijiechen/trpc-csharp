@@ -1,4 +1,5 @@
-﻿using System.IO.Pipelines;
+﻿using System;
+using System.IO.Pipelines;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 
@@ -18,6 +19,7 @@ namespace TrpcSharp.Server.Trpc
         /// Aborts the underlying connection.
         /// </summary>
         Task AbortAsync();
+        void OnDisconnectedAsync(Action<IConnection> eventHandler);
     }
 
     public class AspNetCoreConnection : IConnection
@@ -45,6 +47,12 @@ namespace TrpcSharp.Server.Trpc
         {
             _connectionContext.Abort();
             return Task.CompletedTask;
+        }
+
+        public void OnDisconnectedAsync(Action<IConnection> eventHandler)
+        {
+            // todo: check if async and begin invoke
+            _connectionContext.ConnectionClosed.Register(() => eventHandler(this));
         }
     }
 }

@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace TrpcSharp.Server.Extensions
 {
-    public static class ServiceProviderServiceExtensions
+    internal static class ServiceProviderServiceExtensions
     {
         public static AsyncServiceScope CreateAsyncScope(this IServiceScopeFactory scopeFactory)
         {
@@ -12,7 +12,7 @@ namespace TrpcSharp.Server.Extensions
         }
     }
 
-    public struct AsyncServiceScope : IServiceScope, IAsyncDisposable
+    internal class AsyncServiceScope : IServiceScope, IAsyncDisposable
     {
         private readonly IServiceScope _serviceScope;
 

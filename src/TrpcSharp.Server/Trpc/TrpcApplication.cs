@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
+using TrpcSharp.Protocol.Standard;
 using TrpcSharp.Server.Extensions;
 
 namespace TrpcSharp.Server.Trpc
@@ -22,8 +23,8 @@ namespace TrpcSharp.Server.Trpc
     {
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly ITrpcApplicationBuilder _appBuilder;
-        private readonly ConcurrentQueue<TrpcContext> _requestQueue;
         private TrpcRequestDelegate _requestDelegate;
+        private readonly StreamTracker _streamTracker;
         private readonly ITrpcPacketFramer _trpcFramer;
         private readonly ILogger<TrpcApplication> _logger;
         private volatile bool _isAppRunning = false;
@@ -35,7 +36,8 @@ namespace TrpcSharp.Server.Trpc
             _trpcFramer = framer;
             _logger = logger;
             _serviceScopeFactory = serviceScopeFactory;
-            _requestQueue = new ConcurrentQueue<TrpcContext>();
+            
+            _streamTracker = new StreamTracker();
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -49,6 +51,7 @@ namespace TrpcSharp.Server.Trpc
         {
             _isAppRunning = false;
             // todo: cleanup ongoing connections
+            // _streamTracker.TryClearStreams(xxxx)
             return Task.CompletedTask;
         }
 
@@ -67,9 +70,22 @@ namespace TrpcSharp.Server.Trpc
 
                 if (context.Identifier.Type == ContextType.Streaming)
                 {
-                    // stream tracker!
-                    // init
-                    // close
+                    var streamCtx = context as StreamTrpcContext;
+                    switch (streamCtx!.StreamMessage.StreamFrameType)
+                    {
+                        case TrpcStreamFrameType.TrpcStreamFrameInit:
+                            await HandleStreamInitMessage(streamCtx, scope);
+                            break;
+                        case TrpcStreamFrameType.TrpcStreamFrameData:
+                            // Thread.Channels!
+                            break;
+                        case TrpcStreamFrameType.TrpcStreamFrameFeedback:
+                            HandleStreamFeedbackMessage(trpcMessage as StreamFeedbackMessage, conn.ConnectionId);
+                            break;
+                        case TrpcStreamFrameType.TrpcStreamFrameClose:
+                            await HandleStreamCloseMessage(trpcMessage as StreamCloseMessage, conn.ConnectionId);
+                            break;
+                    }
                 }
                 else
                 {
@@ -79,14 +95,132 @@ namespace TrpcSharp.Server.Trpc
             }
             catch (Exception ex)
             {
-                _logger.LogError(EventIds.ApplicationError, ex, "tRPC Application Error");
-                // todo: send error response
+                _logger.LogWarning(EventIds.ApplicationError, ex, $"Application error: tRPC {context.Identifier} in connection {conn.ConnectionId}");
+                await SendErrorResponse(context);
             }
             finally
             {
-                _logger.LogDebug($"tRPC {context.Identifier} completed in connection {conn.ConnectionId}");
-                await scope.DisposeAsync();
+                _logger.LogDebug($"Process completed: tRPC {context.Identifier} in connection {conn.ConnectionId}");
+                if (scope != null)
+                {
+                    await scope.DisposeAsync();
+                }
             }
+        }
+
+        private async Task SendErrorResponse(TrpcContext ctx)
+        {
+            try
+            {
+                var outputStream = ctx.Connection.Transport.Output.AsStream(leaveOpen: true);
+                if (ctx is StreamTrpcContext streamCtx)
+                {
+                    var resp = new StreamInitResponseMeta
+                    {
+                        ReturnCode = TrpcRetCode.TrpcServerSystemErr,
+                        ErrorMessage = "Internal Server Error"
+                    };
+                    await SendInitResponse(streamCtx, resp);
+                }
+                else
+                {
+                    var unaryCtx = ctx as UnaryTrpcContext;
+                    if (unaryCtx == null)
+                    {
+                        // we can't recognize this context
+                        return;
+                    }
+
+                    unaryCtx.UnaryResponse = CreateResponse(unaryCtx.UnaryRequest);
+                    unaryCtx.UnaryResponse.ReturnCode = TrpcRetCode.TrpcServerSystemErr;
+                    unaryCtx.UnaryResponse.ErrorMessage = "Internal Server Error";
+              
+                    await _trpcFramer.WriteMessageAsync(unaryCtx.UnaryResponse, outputStream);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(EventIds.ApplicationError, ex, 
+                    $"Error sending error response: tRPC {ctx.Identifier} in connection {ctx.Connection.ConnectionId}");
+            }
+        }
+
+        private async Task HandleStreamInitMessage(StreamTrpcContext ctx, IAsyncDisposable disposableScope)
+        {
+            if (_streamTracker.TryGetStream(ctx.Connection.ConnectionId, ctx.Identifier.Id, out _))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicated stream id: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
+            }
+
+            ctx.Connection.OnDisconnectedAsync(async (conn) =>
+            {
+                await _streamTracker.TryClearStreams(conn.ConnectionId);
+                await disposableScope.DisposeAsync();
+            });
+
+            _logger.LogInformation(EventIds.StreamInitialization,  
+                $"Stream init message message received: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
+
+            var requestHandle = _requestDelegate(ctx);
+            await requestHandle.ConfigureAwait(false);
+            
+            await SendInitResponse(ctx, null);
+        }
+
+        private async Task SendInitResponse(StreamTrpcContext ctx, StreamInitResponseMeta response)
+        {
+            var initResponse = new StreamInitMessage
+            {
+                StreamId = ctx.Identifier.Id,
+                ContentType = TrpcContentEncodeType.TrpcProtoEncode,
+                ContentEncoding = TrpcCompressType.TrpcDefaultCompress,
+                ResponseMeta = response
+            };
+
+            await ctx.WriteAsync(initResponse);
+        }
+
+        private void HandleStreamFeedbackMessage(StreamFeedbackMessage feedbackMessage, string connectionId)
+        {
+            if (feedbackMessage == null)
+            {
+                return;
+            }
+            
+            if (!_streamTracker.TryGetStream(connectionId, feedbackMessage.StreamId, out var initStreamCtx))
+            {
+                throw new InvalidOperationException(
+                    $"Stream id not found on server: tRPC {feedbackMessage.StreamId} in connection {connectionId}");
+            }
+            
+            _logger.LogInformation(EventIds.WindowSizeIncrement,  
+                $"Window size increment feedback message received: increment {feedbackMessage.WindowSizeIncrement} for tRPC {feedbackMessage.StreamId} in connection {connectionId}");
+            initStreamCtx.IncrementWindowSize(feedbackMessage.WindowSizeIncrement);
+        }
+
+        private async Task HandleStreamCloseMessage(StreamCloseMessage closeMessage, string connectionId)
+        {
+            if (closeMessage == null)
+            {
+                return;
+            }
+            
+            if (!_streamTracker.TryGetStream(connectionId, closeMessage.StreamId, out var initStreamCtx))
+            {
+                // the stream may already closed!
+                return;
+            }
+            _logger.LogInformation(EventIds.ConnectionClose,  
+                $"Close message received, connection closing: tRPC {closeMessage.StreamId} in connection {connectionId}");
+
+            var pendingWrite = false;
+            var closeType = closeMessage.CloseType;
+            if (closeType == TrpcStreamCloseType.TrpcStreamClose && !pendingWrite)
+            {
+                // todo: 发出去
+            }
+            await initStreamCtx.Connection.AbortAsync();
         }
 
         private (TrpcContext, IAsyncDisposable) CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection)
@@ -96,11 +230,12 @@ namespace TrpcSharp.Server.Trpc
                 return (null, null);
             }
             
-            var scope = _serviceScopeFactory.CreateAsyncScope();
+            AsyncServiceScope scope;
             TrpcContext context = null;
             switch (incomingMessage)
             {
                 case UnaryRequestMessage unaryMsg:
+                    scope = _serviceScopeFactory.CreateAsyncScope();
                     context = new UnaryTrpcContext(unaryMsg.RequestId, _trpcFramer)
                     {
                         Services = scope.ServiceProvider,
@@ -110,15 +245,17 @@ namespace TrpcSharp.Server.Trpc
                     };
                     break;
                 case StreamMessage streamMsg:
+                    var isInitMessage = streamMsg.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit;
+                    scope = isInitMessage ? _serviceScopeFactory.CreateAsyncScope() : null;
                     context = new StreamTrpcContext(streamMsg.StreamId, _trpcFramer)
                     {
-                        Services = scope.ServiceProvider,
+                        Services = scope?.ServiceProvider,
                         Connection = new AspNetCoreConnection(connection),
                         StreamMessage = streamMsg
                     };
                     break;
                 default:
-                    throw new ApplicationException($"Unsupported tRPC message type {incomingMessage.GetType()}");
+                    throw new ApplicationException($"Unsupported message type {incomingMessage.GetType()}: connection {connection.ConnectionId}");
             }
             
             return (context, scope);

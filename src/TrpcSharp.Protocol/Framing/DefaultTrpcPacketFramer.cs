@@ -64,13 +64,13 @@ namespace TrpcSharp.Protocol.Framing
             {
                 case UnaryRequestMessage unaryReqMsg:
                     await UnaryRequestMessageCodec.EncodeAsync(unaryReqMsg, PacketHeaderCodec.EncodePacketHeader, output);
-                    break;
+                    return;
                 case UnaryResponseMessage unaryRespMsg:
                     await UnaryResponseMessageCodec.EncodeAsync(unaryRespMsg, PacketHeaderCodec.EncodePacketHeader, output);
-                    break;
+                    return;
                 case StreamMessage streamMsg:
-                    await StreamMessageCodec.EncodeAsync(streamMsg, PacketHeaderCodec.EncodePacketHeader, output);
-                    break;
+                    await StreamMessageCodec.EncodeAsync(streamMsg,  PacketHeaderCodec.EncodePacketHeader, output);
+                    return;
                 default:
                     throw new InvalidDataException($"Unsupported tRPC message type: {reqMessage.GetType()}");
             }

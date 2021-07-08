@@ -70,6 +70,11 @@ namespace TrpcSharp.Protocol
     
     public class StreamInitMessage : StreamMessage
     {
+        /// <summary>
+        /// 默认窗口大小 字节, 2^21 - 1
+        /// </summary>
+        public const uint DefaultWindowSize  = 2097151;
+            
         public StreamInitMessage()
         {
             StreamFrameType = TrpcStreamFrameType.TrpcStreamFrameInit;
@@ -88,7 +93,7 @@ namespace TrpcSharp.Protocol
         /// <summary>
         /// 发送窗口大小
         /// </summary>
-        public uint InitWindowSize { get; set; }
+        public uint InitWindowSize { get; set; } = DefaultWindowSize;
 
         ///<summary>
         /// 请求数据的序列化类型
