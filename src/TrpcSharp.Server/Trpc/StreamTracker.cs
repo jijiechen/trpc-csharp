@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Threading.Tasks;
-using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Server.Trpc
@@ -41,25 +39,39 @@ namespace TrpcSharp.Server.Trpc
             return connStreams.TryGetValue(streamId, out streamTrpcContext);
         }
         
-        public async Task TryClearStreams(string connectionId)
+        public bool TryRemoveConnection(string connectionId)
         {
             if (!_allStreams.TryRemove(connectionId, out var connStreams))
             {
-                return;
+                return false;
             }
 
             foreach (var streamCtx in connStreams.Values)
             {
-                if (streamCtx.StreamMessage is StreamDataMessage dataMessage)
-                {
-                    await dataMessage.Data.DisposeAsync();
-                }
-
                 streamCtx.StreamMessage = null;
                 streamCtx.Services = null;
                 streamCtx.Connection = null;
             }
             connStreams.Clear();
+            return true;
+        }
+        
+        public bool TryRemoveStream(string connectionId, uint streamId)
+        {
+            if (!_allStreams.TryRemove(connectionId, out var connStreams))
+            {
+                return false;
+            }
+            
+            if (!connStreams.TryRemove(streamId, out var streamCtx))
+            {
+                return false;
+            }
+
+            streamCtx.StreamMessage = null;
+            streamCtx.Services = null;
+            streamCtx.Connection = null;
+            return true;
         }
 
     }

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -77,7 +76,7 @@ namespace TrpcSharp.Server.Trpc
                             await HandleStreamInitMessage(streamCtx, scope);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameData:
-                            // Thread.Channels!
+                            await HandleStreamDataMessage(streamCtx);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameFeedback:
                             HandleStreamFeedbackMessage(trpcMessage as StreamFeedbackMessage, conn.ConnectionId);
@@ -108,41 +107,15 @@ namespace TrpcSharp.Server.Trpc
             }
         }
 
-        private async Task SendErrorResponse(TrpcContext ctx)
+        private async Task HandleStreamDataMessage(StreamTrpcContext dataCtx)
         {
-            try
+            if (!_streamTracker.TryGetStream(dataCtx.Connection.ConnectionId, dataCtx.Identifier.Id, out var initCtx))
             {
-                var outputStream = ctx.Connection.Transport.Output.AsStream(leaveOpen: true);
-                if (ctx is StreamTrpcContext streamCtx)
-                {
-                    var resp = new StreamInitResponseMeta
-                    {
-                        ReturnCode = TrpcRetCode.TrpcServerSystemErr,
-                        ErrorMessage = "Internal Server Error"
-                    };
-                    await SendInitResponse(streamCtx, resp);
-                }
-                else
-                {
-                    var unaryCtx = ctx as UnaryTrpcContext;
-                    if (unaryCtx == null)
-                    {
-                        // we can't recognize this context
-                        return;
-                    }
+                return;
+            }
 
-                    unaryCtx.UnaryResponse = CreateResponse(unaryCtx.UnaryRequest);
-                    unaryCtx.UnaryResponse.ReturnCode = TrpcRetCode.TrpcServerSystemErr;
-                    unaryCtx.UnaryResponse.ErrorMessage = "Internal Server Error";
-              
-                    await _trpcFramer.WriteMessageAsync(unaryCtx.UnaryResponse, outputStream);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(EventIds.ApplicationError, ex, 
-                    $"Error sending error response: tRPC {ctx.Identifier} in connection {ctx.Connection.ConnectionId}");
-            }
+            var incomingMessage = dataCtx.StreamMessage as StreamDataMessage;
+            await initCtx.ReceiveChannel.Writer.WriteAsync(incomingMessage!.Data);
         }
 
         private async Task HandleStreamInitMessage(StreamTrpcContext ctx, IAsyncDisposable disposableScope)
@@ -153,32 +126,56 @@ namespace TrpcSharp.Server.Trpc
                     $"Duplicated stream id: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
             }
 
+            _streamTracker.AddStream(ctx);
             ctx.Connection.OnDisconnectedAsync(async (conn) =>
             {
-                await _streamTracker.TryClearStreams(conn.ConnectionId);
-                await disposableScope.DisposeAsync();
+                _streamTracker.TryRemoveConnection(conn.ConnectionId);
             });
 
-            _logger.LogInformation(EventIds.StreamInitialization,  
-                $"Stream init message message received: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
-
-            var requestHandle = _requestDelegate(ctx);
-            await requestHandle.ConfigureAwait(false);
-            
-            await SendInitResponse(ctx, null);
-        }
-
-        private async Task SendInitResponse(StreamTrpcContext ctx, StreamInitResponseMeta response)
-        {
-            var initResponse = new StreamInitMessage
+            var completedSuccessfully = false;
+            try
             {
-                StreamId = ctx.Identifier.Id,
-                ContentType = TrpcContentEncodeType.TrpcProtoEncode,
-                ContentEncoding = TrpcCompressType.TrpcDefaultCompress,
-                ResponseMeta = response
-            };
+                _logger.LogInformation(EventIds.StreamInitialization,
+                    $"Stream init message message received: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
 
-            await ctx.WriteAsync(initResponse);
+                var initMessage = ctx.StreamMessage as StreamInitMessage;
+                initMessage!.InitWindowSize = initMessage!.InitWindowSize < 1
+                    ? StreamInitMessage.DefaultWindowSize
+                    : initMessage!.InitWindowSize;
+
+                ctx.InitializeDuplexStreamChannels();
+
+                var initResponse = new StreamInitMessage
+                {
+                    StreamId = ctx.Identifier.Id,
+                    ContentType = TrpcContentEncodeType.TrpcProtoEncode,
+                    ContentEncoding = TrpcCompressType.TrpcDefaultCompress,
+                    InitWindowSize = initMessage.InitWindowSize
+                };
+                await ctx.WriteAsync(initResponse);
+
+                await _requestDelegate(ctx);
+                
+                await ctx.FlushAllAsync();
+                completedSuccessfully = true;
+            }
+            finally
+            {
+                if (ctx.Connection != null)
+                {
+                    var closeMessage = new StreamCloseMessage
+                    {
+                        StreamId = ctx.Identifier.Id,
+                        CloseType = completedSuccessfully
+                            ? TrpcStreamCloseType.TrpcStreamClose
+                            : TrpcStreamCloseType.TrpcStreamReset
+                    };
+                    await ctx.WriteAsync(closeMessage);
+                    _streamTracker.TryRemoveStream(ctx.Connection.ConnectionId, ctx.Identifier.Id);
+                }
+                
+                await disposableScope.DisposeAsync();
+            }
         }
 
         private void HandleStreamFeedbackMessage(StreamFeedbackMessage feedbackMessage, string connectionId)
@@ -196,7 +193,8 @@ namespace TrpcSharp.Server.Trpc
             
             _logger.LogInformation(EventIds.WindowSizeIncrement,  
                 $"Window size increment feedback message received: increment {feedbackMessage.WindowSizeIncrement} for tRPC {feedbackMessage.StreamId} in connection {connectionId}");
-            initStreamCtx.IncrementWindowSize(feedbackMessage.WindowSizeIncrement);
+            (initStreamCtx as IStreamWindowSizeCounter).IncrementSendWindowSize(
+                feedbackMessage.StreamId, feedbackMessage.WindowSizeIncrement);
         }
 
         private async Task HandleStreamCloseMessage(StreamCloseMessage closeMessage, string connectionId)
@@ -206,21 +204,80 @@ namespace TrpcSharp.Server.Trpc
                 return;
             }
             
-            if (!_streamTracker.TryGetStream(connectionId, closeMessage.StreamId, out var initStreamCtx))
+            if (!_streamTracker.TryGetStream(connectionId, closeMessage.StreamId, out var initCtx))
             {
                 // the stream may already closed!
                 return;
             }
+            
             _logger.LogInformation(EventIds.ConnectionClose,  
                 $"Close message received, connection closing: tRPC {closeMessage.StreamId} in connection {connectionId}");
 
-            var pendingWrite = false;
-            var closeType = closeMessage.CloseType;
-            if (closeType == TrpcStreamCloseType.TrpcStreamClose && !pendingWrite)
+            if (closeMessage.CloseType == TrpcStreamCloseType.TrpcStreamClose)
             {
-                // todo: 发出去
+                await initCtx.SendChannel.Reader.Completion;
             }
-            await initStreamCtx.Connection.AbortAsync();
+            // stream/connection 相关的清理工作，会在 Connection.Disconnect 事件里处理
+            await initCtx.Connection.AbortAsync();
+        }
+
+        private async Task SendErrorResponse(TrpcContext ctx)
+        {
+            try
+            {
+                if (ctx is StreamTrpcContext streamCtx)
+                {
+                    var resp = new StreamInitResponseMeta
+                    {
+                        ReturnCode = TrpcRetCode.TrpcServerSystemErr,
+                        ErrorMessage = "Internal Server Error"
+                    };
+                    if (!(streamCtx.StreamMessage is StreamInitMessage))
+                    {
+                        if (!_streamTracker.TryGetStream(streamCtx.Connection.ConnectionId, streamCtx.Identifier.Id, out streamCtx))
+                        {
+                            return;
+                        }
+                    }
+                    
+                    var initResponse = new StreamInitMessage
+                    {
+                        StreamId = streamCtx.Identifier.Id,
+                        ContentType = TrpcContentEncodeType.TrpcProtoEncode,
+                        ContentEncoding = TrpcCompressType.TrpcDefaultCompress,
+                        ResponseMeta = resp
+                    };
+                    await streamCtx.WriteAsync(initResponse);
+
+                    var closeMessage = new StreamCloseMessage
+                    {
+                        StreamId = streamCtx.Identifier.Id,
+                        CloseType = TrpcStreamCloseType.TrpcStreamReset
+                    };
+                    await streamCtx.WriteAsync(closeMessage);
+                }
+                else
+                {
+                    var unaryCtx = ctx as UnaryTrpcContext;
+                    if (unaryCtx == null)
+                    {
+                        // we can't recognize this context
+                        return;
+                    }
+
+                    unaryCtx.UnaryResponse = CreateResponse(unaryCtx.UnaryRequest);
+                    unaryCtx.UnaryResponse.ReturnCode = TrpcRetCode.TrpcServerSystemErr;
+                    unaryCtx.UnaryResponse.ErrorMessage = "Internal Server Error";
+              
+                    await _trpcFramer.WriteMessageAsync(unaryCtx.UnaryResponse, 
+                        ctx.Connection.Transport.Output.AsStream(leaveOpen: true));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(EventIds.ApplicationError, ex, 
+                    $"Error sending error response: tRPC {ctx.Identifier} in connection {ctx.Connection.ConnectionId}");
+            }
         }
 
         private (TrpcContext, IAsyncDisposable) CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection)

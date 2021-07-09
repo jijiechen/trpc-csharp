@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
@@ -46,9 +48,10 @@ namespace TrpcSharp.Server.Trpc
         }
     }
     
-    public class StreamTrpcContext: TrpcContext
+    public class StreamTrpcContext: TrpcContext, IStreamWindowSizeCounter
     {
-        private uint _windowSize;
+        private volatile uint _windowSize;
+        private volatile uint _clientWindowSize;
         private readonly ITrpcPacketFramer _framer;
         public StreamTrpcContext(uint streamId, ITrpcPacketFramer framer)
         {
@@ -57,18 +60,49 @@ namespace TrpcSharp.Server.Trpc
         }
         public StreamMessage StreamMessage { get; set; }
 
-        public void IncrementWindowSize(uint increment)
+        public void InitializeDuplexStreamChannels()
         {
-            _windowSize += increment;
-        }
-
-        public async Task<bool> WriteAsync(Stream data)
-        {
-            if (data.Length > _windowSize)
+            if (!(StreamMessage is StreamInitMessage initMessage))
             {
-                return false;
+                throw new InvalidOperationException("DuplexStreamChannels are only available on tRPC Init contexts");
             }
             
+            ReceiveChannel = Channel.CreateUnbounded<Stream>();
+            SendChannel = Channel.CreateUnbounded<Stream>();
+
+            _windowSize = initMessage.InitWindowSize;
+            _clientWindowSize = initMessage.InitWindowSize;
+        }
+        
+        public Channel<Stream> SendChannel { get; set; }
+        
+        public Channel<Stream> ReceiveChannel { get; set; }
+
+        public async Task FlushAllAsync(int secondsWaitForWindowSize = 60)
+        {
+            var channelReader = SendChannel.Reader;
+            await foreach (var item in channelReader.ReadAllAsync().ConfigureAwait(false))
+            {
+                var waited = false;
+                while (item.Length > _windowSize)
+                {
+                    if (!waited && secondsWaitForWindowSize > 0)
+                    {
+                        await Task.Delay(secondsWaitForWindowSize);
+                        waited = true;
+                    }
+                    else
+                    {
+                        throw new WindowSizeExceededException(item.Length, _windowSize);
+                    }
+                }
+                
+                await WriteToOutputAsync(item).ConfigureAwait(false);
+            }
+        }
+        
+        private async Task WriteToOutputAsync(Stream data)
+        {
             var streamMessage = new StreamDataMessage
             {
                 StreamId = Identifier.Id,
@@ -76,8 +110,19 @@ namespace TrpcSharp.Server.Trpc
             };
             
             await _framer.WriteMessageAsync(streamMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
-            _windowSize -= (uint)data.Length;
-            return _windowSize > 0;
+            await data.DisposeAsync();
+
+            WindowSizeUsed((uint) data.Length);
+        }
+        
+        public async Task WriteAsync(Stream stream)
+        {
+            if (stream == null)
+            {
+                throw new ArgumentNullException(nameof(stream));
+            }
+
+            await SendChannel.Writer.WriteAsync(stream);
         }
         
         public async Task WriteAsync(StreamMessage trpcMessage)
@@ -90,8 +135,69 @@ namespace TrpcSharp.Server.Trpc
             
             await _framer.WriteMessageAsync(trpcMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
         }
+
+        private void WindowSizeUsed(uint usedWindowSize)
+        {
+            Interlocked.Exchange(ref _windowSize, _windowSize - usedWindowSize);
+        }
+
+        void IStreamWindowSizeCounter.IncrementSendWindowSize(uint streamId, uint increment)
+        {
+            if (streamId != Identifier.Id)
+            {
+                return;
+            }
+            
+            Interlocked.Add(ref _windowSize, increment);
+        }
+
+        void IStreamWindowSizeCounter.MarkWindowSizeAsSent(uint streamId, uint usedWindowSize)
+        {
+            if (streamId != Identifier.Id)
+            {
+                return;
+            }
+
+            WindowSizeUsed(usedWindowSize);
+        }
+
+        public async Task FeedbackReadWindowSizeAsync(uint streamId, uint windowSize)
+        {
+            if (streamId != Identifier.Id)
+            {
+                return;
+            }
+
+            var clientWindowSizeLeft = _clientWindowSize < windowSize ? 0 : _clientWindowSize - windowSize;
+            Interlocked.Exchange(ref _clientWindowSize, clientWindowSizeLeft);
+            
+            if (clientWindowSizeLeft >= Math.Ceiling(0.25 * StreamInitMessage.DefaultWindowSize))
+            {
+                return;
+            }
+
+            var feedbackMessage = new StreamFeedbackMessage
+            {
+                StreamId = Identifier.Id,
+                WindowSizeIncrement = StreamInitMessage.DefaultWindowSize - clientWindowSizeLeft
+            };
+            await WriteAsync(feedbackMessage).ConfigureAwait(false);
+        }
     }
 
+    public interface IStreamWindowSizeCounter
+    {
+        void IncrementSendWindowSize(uint streamId, uint increment);
+        void MarkWindowSizeAsSent(uint streamId, uint windowSize);
+        Task FeedbackReadWindowSizeAsync(uint streamId, uint windowSize);
+    }
+    
+    public enum TrpcStreamingMode
+    {
+        ClientStreaming,
+        ServerStreaming,
+        DuplexStreaming
+    }
 
     public struct ContextId
     {
@@ -104,8 +210,7 @@ namespace TrpcSharp.Server.Trpc
             return $"{prefix}-{this.Id}";
         }
     }
-    
-    
+
     public enum ContextType
     {
         UnaryRequest = 0,
