@@ -150,7 +150,7 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: Ret
         /// </remarks>
-        public int ReturnCode { get; set; }
+        public TrpcRetCode ReturnCode { get; set; }
 
         /// <summary>
         /// close信息描述

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -29,14 +30,14 @@ namespace TrpcSharp.Server.Trpc
         private class TrpcConnectionHandler : ConnectionHandler
         {
             private readonly ITrpcPacketFramer _framer;
-            private readonly ITrpcApplication _application;
+            private readonly ITrpcMessageDispatcher _messageDispatcher;
             private readonly ILogger<TrpcConnectionHandler> _logger;
 
-            public TrpcConnectionHandler(ITrpcPacketFramer framer, ITrpcApplication application, 
+            public TrpcConnectionHandler(ITrpcPacketFramer framer, ITrpcMessageDispatcher messageDispatcher, 
                 ILogger<TrpcConnectionHandler> logger)
             {
                 _framer = framer;
-                _application = application;
+                _messageDispatcher = messageDispatcher;
                 _logger = logger;
             }
 
@@ -68,7 +69,7 @@ namespace TrpcSharp.Server.Trpc
 
                                 try
                                 {
-                                    await _application.DispatchRequestAsync(message, connection);
+                                    await _messageDispatcher.DispatchRequestAsync(message, connection);
                                 }
                                 catch (OperationCanceledException)
                                 {
@@ -119,5 +120,11 @@ namespace TrpcSharp.Server.Trpc
             }
             
         }
+    }
+    
+    public class ServerOptions
+    {
+        public IPEndPoint EndPoint { get; set; }
+        // certificate, etc.
     }
 }

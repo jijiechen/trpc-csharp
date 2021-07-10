@@ -14,9 +14,9 @@ namespace TrpcSharp.Server.Trpc
         {
             services.TryAddSingleton<ITrpcPacketFramer, DefaultTrpcPacketFramer>();
             services.TryAddSingleton<ITrpcApplicationBuilder, DefaultTrpcApplicationBuilder>();
-            services.TryAddSingleton<ITrpcApplication, TrpcApplication>();
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, TrpcApplication>(
-                sp => (TrpcApplication)(sp.GetService<ITrpcApplication>()) ));
+            services.TryAddSingleton<ITrpcMessageDispatcher, TrpcMessageDispatcher>();
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, TrpcMessageDispatcher>(
+                sp => (TrpcMessageDispatcher)(sp.GetService<ITrpcMessageDispatcher>()) ));
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IConfigureOptions<KestrelServerOptions>, TrpcServerOptionsSetup>());
             
             services.Configure<ServerOptions>(o =>

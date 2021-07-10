@@ -91,7 +91,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             {
                 StreamId = streamId,
                 CloseType = (TrpcStreamCloseType) meta.CloseType,
-                ReturnCode = meta.Ret,
+                ReturnCode = (TrpcRetCode)meta.Ret,
                 FuncCode = meta.FuncRet,
                 Message = meta.Msg?.ToStringUtf8(),
                 MessageType = (TrpcMessageType) meta.MessageType,
@@ -186,7 +186,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
             var meta = new TrpcStreamCloseMeta
             {
                 CloseType = (int) closeMsg.CloseType,
-                Ret = closeMsg.ReturnCode,
+                Ret = (int)closeMsg.ReturnCode,
                 FuncRet = closeMsg.FuncCode,
                 Msg = closeMsg.Message == null ? null : ByteString.CopyFrom(Encoding.UTF8.GetBytes(closeMsg.Message)),
                 MessageType = (uint) closeMsg.MessageType,

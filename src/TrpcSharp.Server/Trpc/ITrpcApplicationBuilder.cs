@@ -40,15 +40,7 @@ namespace TrpcSharp.Server.Trpc
         
         public TrpcRequestDelegate Build()
         {
-            TrpcRequestDelegate app = ctx =>
-            {
-                if (ctx is UnaryTrpcContext {HasResponded: false} unaryCtx)
-                {
-                    return unaryCtx.Respond();
-                }
-                return Task.CompletedTask;
-            };
-
+            TrpcRequestDelegate app = _ => Task.CompletedTask;
             for (var c = _components.Count - 1; c >= 0; c--)
             {
                 app = _components[c](app);

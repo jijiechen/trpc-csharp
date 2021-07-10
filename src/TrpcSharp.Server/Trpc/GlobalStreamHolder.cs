@@ -4,7 +4,7 @@ using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Server.Trpc
 {
-    internal class StreamTracker
+    internal class GlobalStreamHolder
     {
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<uint, StreamTrpcContext>> _allStreams = new();
 
