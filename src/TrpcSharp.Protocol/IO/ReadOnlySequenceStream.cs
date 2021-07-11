@@ -23,7 +23,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using IOStream = System.IO.Stream;
 
-namespace TrpcSharp.Protocol.Framing
+namespace TrpcSharp.Protocol.IO
 {
     // taken from https://github.com/grpc/grpc-dotnet/blob/f54a118569/src/Grpc.AspNetCore.Server/Internal/ReadOnlySequenceStream.cs
     // Potentially remove in the future when https://github.com/dotnet/corefx/issues/31804 is implemented
@@ -32,7 +32,7 @@ namespace TrpcSharp.Protocol.Framing
         private static readonly Task<int> TaskOfZero = Task.FromResult(0);
 
         private Task<int> _lastReadTask;
-        private ReadOnlySequence<byte> _readOnlySequence;
+        private readonly ReadOnlySequence<byte> _readOnlySequence;
         private SequencePosition _position;
 
         public ReadOnlySequenceStream(ReadOnlySequence<byte> readOnlySequence)

@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using Google.Protobuf;
+using TrpcSharp.Protocol.IO;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing.MessageCodecs
@@ -45,7 +46,6 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 InitWindowSize = meta.InitWindowSize,
                 ContentType = (TrpcContentEncodeType)meta.ContentType,
                 ContentEncoding = (TrpcCompressType)meta.ContentEncoding,
-                
             };
 
             if (meta.RequestMeta != null)

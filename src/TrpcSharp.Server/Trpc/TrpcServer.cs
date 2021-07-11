@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Buffers;
 using System.IO;
 using System.IO.Pipelines;
 using System.Net;
@@ -52,12 +51,14 @@ namespace TrpcSharp.Server.Trpc
                     while (true)
                     {
                         var result = await input.ReadAsync();
-                        var buffer = result.Buffer;
-
-                        var shouldContinue = await ReadAndProcessMessage(connection, result, input, buffer);
+                        var shouldContinue = await ReadAndProcessMessage(connection, result, input);
                         if (!shouldContinue)
                             break;
                     }
+                }
+                catch (ConnectionResetException)
+                {
+                    _logger.LogDebug($"Connection {connection.ConnectionId} reset from remote endpoint {connection.RemoteEndPoint}");
                 }
                 finally
                 {
@@ -66,8 +67,7 @@ namespace TrpcSharp.Server.Trpc
                 }
             }
 
-            private async Task<bool> ReadAndProcessMessage(ConnectionContext connection, ReadResult result,
-                PipeReader input, ReadOnlySequence<byte> buffer)
+            private async Task<bool> ReadAndProcessMessage(ConnectionContext connection, ReadResult result, PipeReader input)
             {
                 try
                 {
@@ -76,17 +76,14 @@ namespace TrpcSharp.Server.Trpc
                         return false;
                     }
 
+                    var buffer = result.Buffer;
                     if (!buffer.IsEmpty)
                     {
-                        
-                        
-                        
                         var advanced = false;
                         var consumed = buffer.Start;
                         SequencePosition examined;
-                        while (_framer.TryReadMessageAsServer(ref buffer, out var message, out consumed, out examined))
+                        while (_framer.TryReadMessageAsServer(buffer.Slice(consumed), out var message, out consumed, out examined))
                         {
-                            Console.WriteLine($"<<<<<<<<<<<< 1 Read buffer from {consumed.GetObject()!.GetHashCode()}, consumed: {consumed.GetInteger()}, examined: {examined.GetInteger()}");
                             input.AdvanceTo(consumed, examined);
                             advanced = true;
 
@@ -108,7 +105,6 @@ namespace TrpcSharp.Server.Trpc
 
                         if (!advanced)
                         {
-                            Console.WriteLine($"<<<<<<<<<<<< 2 Read buffer from {consumed.GetObject()!.GetHashCode()}, consumed: {consumed.GetInteger()}, examined: {examined.GetInteger()}");
                             input.AdvanceTo(consumed, examined);
                         }
                     }

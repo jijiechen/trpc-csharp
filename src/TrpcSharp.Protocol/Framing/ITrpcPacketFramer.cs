@@ -11,14 +11,14 @@ namespace TrpcSharp.Protocol.Framing
         /// 尝试以客户端的身份读入消息（可能是 UnaryResponse 或 Stream）
         /// </summary>
         /// <returns>是否已成功读取消息</returns>
-        bool TryReadMessageAsClient(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
+        bool TryReadMessageAsClient(ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
             out SequencePosition consumed, out SequencePosition examined);
         
         /// <summary>
         /// 尝试以服务器端的身份读入消息（可能是 UnaryRequest 或 Stream）
         /// </summary>
         /// <returns>是否已成功读取消息</returns>
-        bool TryReadMessageAsServer(ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
+        bool TryReadMessageAsServer(ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
             out SequencePosition consumed, out SequencePosition examined);
 
         /// <summary>
