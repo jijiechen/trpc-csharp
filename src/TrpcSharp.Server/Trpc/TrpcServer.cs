@@ -14,7 +14,6 @@ namespace TrpcSharp.Server.Trpc
     public class TrpcServerOptionsSetup : IConfigureOptions<KestrelServerOptions>
     {
         private readonly ServerOptions _options;
-
         public TrpcServerOptionsSetup(IOptions<ServerOptions> options)
         {
             _options = options.Value;

@@ -3,7 +3,6 @@ using System.Buffers;
 using System.IO;
 using System.Threading.Tasks;
 using TrpcSharp.Protocol.Framing.MessageCodecs;
-using TrpcSharp.Protocol.IO;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing

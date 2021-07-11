@@ -22,18 +22,18 @@ namespace TrpcSharp.Server
                 
                 if (ctx is StreamTrpcContext streamCtx)
                 {
-                    await streamCtx.InitializeStreamingAsync(TrpcServerStreamingMode.ClientStreaming);
+                    await streamCtx.InitializeStreamingAsync(TrpcServerStreamingMode.DuplexStreaming);
 
 
-                    // var counter = 0;
-                    // while (counter++ < 10)
-                    // {
-                    //     var hello = Encoding.UTF8.GetBytes("{\"distance\":" + counter + " }");
-                    //     await streamCtx.SendChannel.Writer.WriteAsync(new MemoryStream(hello));
-                    //     await Task.Delay(TimeSpan.FromMilliseconds(500));
-                    // }
+                    var counter = 0;
+                    while (counter++ < 10)
+                    {
+                        var hello = Encoding.UTF8.GetBytes("{\"distance\":" + counter + " }");
+                        await streamCtx.SendChannel.Writer.WriteAsync(new MemoryStream(hello));
+                        await Task.Delay(TimeSpan.FromMilliseconds(500));
+                    }
 
-                    // streamCtx.SendChannel.Writer.TryComplete();
+                    streamCtx.SendChannel.Writer.TryComplete();
                     
                     await foreach (var stream in streamCtx.ReceiveChannel.Reader.ReadAllAsync())
                     {
