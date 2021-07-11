@@ -21,7 +21,7 @@ namespace TrpcSharp.Server.Trpc
         /// <summary>
         /// Gets or sets the remote endpoint for this connection.
         /// </summary>
-        EndPoint? RemoteEndPoint { get; set; }
+        EndPoint RemoteEndPoint { get; set; }
         
         /// <summary>
         /// Aborts the underlying connection.
@@ -67,6 +67,7 @@ namespace TrpcSharp.Server.Trpc
         public void OnDisconnectedAsync(Action<IConnection> eventHandler)
         {
             // todo: check if async and begin invoke
+            
             _connectionContext.ConnectionClosed.Register(() => eventHandler(this));
         }
     }

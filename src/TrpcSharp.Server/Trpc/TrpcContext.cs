@@ -25,9 +25,9 @@ namespace TrpcSharp.Server.Trpc
     {       
         private readonly ITrpcPacketFramer _framer;
         private volatile bool _hasResponded = false;
-        public UnaryTrpcContext(uint requestId, ITrpcPacketFramer framer)
+        public UnaryTrpcContext(string connId, uint requestId, ITrpcPacketFramer framer)
         {
-            Identifier = new ContextId{ Type = ContextType.UnaryRequest, Id =  requestId};
+            Identifier = new ContextId{ Type = ContextType.UnaryRequest, Id =  requestId, ConnectionId = connId};
             _framer = framer;
         }
 
@@ -55,9 +55,9 @@ namespace TrpcSharp.Server.Trpc
         private CancellationTokenSource _windowSizeWaitHandle;
         private readonly ITrpcPacketFramer _framer;
         private TrpcRetCode? _initResponseCode = null;
-        public StreamTrpcContext(uint streamId, ITrpcPacketFramer framer)
+        public StreamTrpcContext(string connId, uint streamId, ITrpcPacketFramer framer)
         {
-            Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId};
+            Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId, ConnectionId = connId};
             _framer = framer;
         }
         public StreamMessage StreamMessage { get; set; }
@@ -77,13 +77,13 @@ namespace TrpcSharp.Server.Trpc
             }
 
             if (streamingMode == TrpcServerStreamingMode.DuplexStreaming ||
-                streamingMode == TrpcServerStreamingMode.ServerStreaming)
+                streamingMode == TrpcServerStreamingMode.ClientStreaming)
             {
                 ReceiveChannel = Channel.CreateUnbounded<Stream>();
             }
 
             if (streamingMode == TrpcServerStreamingMode.DuplexStreaming ||
-                streamingMode == TrpcServerStreamingMode.ClientStreaming)
+                streamingMode == TrpcServerStreamingMode.ServerStreaming)
             {
                 SendChannel = Channel.CreateUnbounded<Stream>();
             }
@@ -109,7 +109,12 @@ namespace TrpcSharp.Server.Trpc
                 return;
             }
             
-            var channelReader = SendChannel.Reader;
+            var channelReader = SendChannel?.Reader;
+            if (channelReader == null)
+            {
+                return;
+            }
+            
             await foreach (var item in channelReader.ReadAllAsync().ConfigureAwait(false))
             {
                 var waited = false;
@@ -130,22 +135,13 @@ namespace TrpcSharp.Server.Trpc
                     }
                 }
                 
-                await WriteToOutputAsync(item).ConfigureAwait(false);
+                var streamMessage = new StreamDataMessage
+                {
+                    StreamId = Identifier.Id,
+                    Data = item
+                };
+                await WriteMessageToOutput(streamMessage).ConfigureAwait(false);
             }
-        }
-
-        private async Task WriteToOutputAsync(Stream data)
-        {
-            var streamMessage = new StreamDataMessage
-            {
-                StreamId = Identifier.Id,
-                Data = data
-            };
-            
-            await _framer.WriteMessageAsync(streamMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
-            await data.DisposeAsync();
-
-            WindowSizeUsed((uint) data.Length);
         }
 
         public async Task WriteAsync(Stream stream)
@@ -167,8 +163,50 @@ namespace TrpcSharp.Server.Trpc
                 throw new InvalidOperationException(
                     $"Please use {nameof(WriteAsync)}(Stream) overload to write this data");
             }
-            
-            await _framer.WriteMessageAsync(trpcMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
+
+            await WriteMessageToOutput(trpcMessage);
+        }
+
+        private async Task WriteMessageToOutput(StreamMessage trpcMessage)
+        {
+            var dataMessage = trpcMessage as StreamDataMessage;
+            uint dataLength = 0;
+            if (dataMessage != null)
+            {
+                dataLength = (uint) (dataMessage.Data?.Length ?? 0);
+            }
+
+            try
+            {
+                if (Connection == null)
+                {
+                    return;
+                }
+                
+                await _framer.WriteMessageAsync(trpcMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
+                if (dataLength > 0)
+                {
+                    WindowSizeUsed(dataLength);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // the Pipe Output is complete 
+            }
+            finally
+            {
+                try
+                {
+                    if (dataMessage?.Data != null)
+                    {
+                        await dataMessage.Data.DisposeAsync();
+                    }
+                }
+                catch
+                {
+                    // we can't do anything if the dispose fails
+                }
+            }
         }
 
         private bool AssertInitSuccess(bool throwIfFailed)
@@ -195,9 +233,52 @@ namespace TrpcSharp.Server.Trpc
             return false;
         }
 
-        async Task IStreamCallTracker.RespondInitMessageAsync(TrpcRetCode retCode)
+        #region IStreamCallTracker
+
+        async Task IStreamCallTracker.RespondInitMessageAsync(uint streamId, TrpcRetCode retCode)
         {
+            if (streamId != this.Identifier.Id)
+            {
+                return;
+            }
+            
             await RespondInitAsync(retCode);
+        }
+
+        private TaskCompletionSource _responseTcs; 
+        Task IStreamCallTracker.GetInitResponseTask(uint streamId)
+        {
+            if (streamId != Identifier.Id)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_responseTcs == null && StreamMessage?.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
+            {
+                _responseTcs = new TaskCompletionSource();
+            }
+
+            return _responseTcs?.Task;
+        }
+
+        private Func<StreamTrpcContext, TrpcStreamCloseType, Task> _completeHandler; 
+        void IStreamCallTracker.OnComplete(Func<StreamTrpcContext, TrpcStreamCloseType, Task> handler)
+        {
+            _completeHandler = handler;
+        }
+
+        async Task IStreamCallTracker.CompleteAsync(uint streamId, TrpcStreamCloseType closeType)
+        {
+            if (streamId != Identifier.Id)
+            {
+                return;
+            }
+
+            if (_completeHandler != null)
+            {
+                await _completeHandler(this, closeType);
+                _completeHandler = null;
+            }
         }
 
         private async Task RespondInitAsync(TrpcRetCode retCode)
@@ -215,6 +296,7 @@ namespace TrpcSharp.Server.Trpc
                 }
             };
             await WriteAsync(responseMsg);
+            _responseTcs?.SetResult();
         }
 
         void IStreamCallTracker.IncrementSendWindowSize(uint streamId, uint increment)
@@ -267,11 +349,18 @@ namespace TrpcSharp.Server.Trpc
             };
             await WriteAsync(feedbackMessage).ConfigureAwait(false);
         }
+        
+        #endregion
     }
 
     public interface IStreamCallTracker
     {
-        Task RespondInitMessageAsync(TrpcRetCode retCode);
+        Task RespondInitMessageAsync(uint streamId, TrpcRetCode retCode);
+        Task GetInitResponseTask(uint streamId);
+
+        void OnComplete(Func<StreamTrpcContext, TrpcStreamCloseType, Task> handler);
+        Task CompleteAsync(uint streamId, TrpcStreamCloseType closeType);
+        
         void IncrementSendWindowSize(uint streamId, uint increment);
         void MarkWindowSizeAsSent(uint streamId, uint windowSize);
         Task FeedbackReadWindowSizeAsync(uint streamId, uint windowSize);
@@ -279,8 +368,17 @@ namespace TrpcSharp.Server.Trpc
     
     public enum TrpcServerStreamingMode
     {
+        /// <summary>
+        /// 客户端持续发送数据的流式调用
+        /// </summary>
         ClientStreaming,
+        /// <summary>
+        /// 服务端持续发送数据的流式调用
+        /// </summary>
         ServerStreaming,
+        /// <summary>
+        /// 双向均可持续发送数据的流式调用
+        /// </summary>
         DuplexStreaming
     }
 
@@ -289,10 +387,12 @@ namespace TrpcSharp.Server.Trpc
         public ContextType Type { get; set; }
         public uint Id { get; set; }
         
+        public string ConnectionId { get; set; }
+        
         public override string ToString()
         {
             var prefix = Type == ContextType.Streaming ? "stream" : "unary";
-            return $"{prefix}-{this.Id}";
+            return $"C_{ConnectionId}-T_{prefix}-ID_{Id}";
         }
     }
 

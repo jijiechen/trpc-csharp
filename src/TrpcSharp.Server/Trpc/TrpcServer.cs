@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
+using System.IO.Pipelines;
 using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
@@ -43,82 +45,102 @@ namespace TrpcSharp.Server.Trpc
 
             public override async Task OnConnectedAsync(ConnectionContext connection)
             {
-                var input = connection.Transport.Input;
-                while (true)
+                _logger.LogDebug($"New connection {connection.ConnectionId} established from remote endpoint {connection.RemoteEndPoint}");
+                try
                 {
-                    var result = await input.ReadAsync();
-                    var buffer = result.Buffer;
-
-                    try
+                    var input = connection.Transport.Input;
+                    while (true)
                     {
-                        if (result.IsCanceled)
-                        {
+                        var result = await input.ReadAsync();
+                        var buffer = result.Buffer;
+
+                        var shouldContinue = await ReadAndProcessMessage(connection, result, input, buffer);
+                        if (!shouldContinue)
                             break;
-                        }
-
-                        if (!buffer.IsEmpty)
-                        {
-                            var advanced = false;
-                            SequencePosition consumed;
-                            SequencePosition examined;
-                            while (_framer.TryReadMessageAsServer(ref buffer, out var message,
-                                out consumed, out examined))
-                            {
-                                input.AdvanceTo(consumed, examined);
-                                advanced = true;
-
-                                try
-                                {
-                                    await _messageDispatcher.DispatchRequestAsync(message, connection);
-                                }
-                                catch (OperationCanceledException)
-                                {
-                                    // Don't treat OperationCanceledException as an error, it's basically a "control flow"
-                                    // exception to stop things from running
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogWarning(EventIds.ApplicationError, ex, "Unhandled application exception: " + ex.Message);
-                                    return;
-                                }
-                            }
-
-                            if (!advanced)
-                            {
-                                input.AdvanceTo(consumed, examined);
-                            }
-                        }
-
-                        if (result.IsCompleted)
-                        {
-                            if (!buffer.IsEmpty)
-                            {
-                                throw new InvalidDataException("Connection terminated while reading a message.");
-                            }
-
-                            break;
-                        }
-                    }
-                    catch (InvalidDataException dataEx)
-                    {
-                        _logger.LogDebug(EventIds.ProtocolError, dataEx.Message);
-                    }
-                    catch (ConnectionResetException closeEx)
-                    {
-                        _logger.LogDebug(EventIds.ConnectionReset, closeEx.Message);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(EventIds.UnknownConnectionError, ex.Message);
-                    }
-                    finally
-                    {
-                        await connection.Transport.Input.CompleteAsync();
-                        await connection.Transport.Output.CompleteAsync();
                     }
                 }
+                finally
+                {
+                    await connection.Transport.Input.CompleteAsync();
+                    await connection.Transport.Output.CompleteAsync();
+                }
             }
-            
+
+            private async Task<bool> ReadAndProcessMessage(ConnectionContext connection, ReadResult result,
+                PipeReader input, ReadOnlySequence<byte> buffer)
+            {
+                try
+                {
+                    if (result.IsCanceled)
+                    {
+                        return false;
+                    }
+
+                    if (!buffer.IsEmpty)
+                    {
+                        
+                        
+                        
+                        var advanced = false;
+                        var consumed = buffer.Start;
+                        SequencePosition examined;
+                        while (_framer.TryReadMessageAsServer(ref buffer, out var message, out consumed, out examined))
+                        {
+                            Console.WriteLine($"<<<<<<<<<<<< 1 Read buffer from {consumed.GetObject()!.GetHashCode()}, consumed: {consumed.GetInteger()}, examined: {examined.GetInteger()}");
+                            input.AdvanceTo(consumed, examined);
+                            advanced = true;
+
+                            try
+                            {
+                                await _messageDispatcher.DispatchRequestAsync(message, connection);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // Don't treat OperationCanceledException as an error, it's basically a "control flow"
+                                // exception to stop things from running
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(EventIds.ApplicationError, ex, "Unhandled application exception: " + ex.Message);
+                                break;
+                            }
+                        }
+
+                        if (!advanced)
+                        {
+                            Console.WriteLine($"<<<<<<<<<<<< 2 Read buffer from {consumed.GetObject()!.GetHashCode()}, consumed: {consumed.GetInteger()}, examined: {examined.GetInteger()}");
+                            input.AdvanceTo(consumed, examined);
+                        }
+                    }
+
+                    if (result.IsCompleted)
+                    {
+                        if (!buffer.IsEmpty)
+                        {
+                            throw new InvalidDataException("Connection terminated while reading a message.");
+                        }
+
+                        return false;
+                    }
+                    
+                    return true;
+                }
+                catch (InvalidDataException dataEx)
+                {
+                    _logger.LogDebug(EventIds.ProtocolError, dataEx.Message);
+                    return false;
+                }
+                catch (ConnectionResetException closeEx)
+                {
+                    _logger.LogDebug(EventIds.ConnectionReset, closeEx.Message);
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(EventIds.UnknownConnectionError, ex.Message);
+                    return false;
+                }
+            }
         }
     }
     

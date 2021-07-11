@@ -59,15 +59,14 @@ namespace TrpcSharp.Server.Trpc
             var (context, scope) = CreateTrpcContext(trpcMessage, conn);
             if (context == null)
             {
-                _logger.LogDebug($"A tRPC context can not be created for connection {conn.ConnectionId}");
+                _logger.LogWarning($"A tRPC context can not be created for connection {conn.ConnectionId}");
                 return;
             }
-            
-            try
-            {
-                _logger.LogDebug($"tRPC {context.Identifier} starting in connection {conn.ConnectionId}");
 
-                if (context.Identifier.Type == ContextType.Streaming)
+
+            if (context.Identifier.Type == ContextType.Streaming)
+            {
+                try
                 {
                     var streamCtx = context as StreamTrpcContext;
                     switch (streamCtx!.StreamMessage.StreamFrameType)
@@ -76,159 +75,163 @@ namespace TrpcSharp.Server.Trpc
                             await HandleStreamInitMessage(streamCtx, scope);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameData:
-                            await HandleStreamDataMessage(trpcMessage as StreamDataMessage, conn.ConnectionId);
+                            await HandleStreamDataMessage(streamCtx.Identifier, trpcMessage as StreamDataMessage);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameFeedback:
-                            HandleStreamFeedbackMessage(trpcMessage as StreamFeedbackMessage, conn.ConnectionId);
+                            HandleStreamFeedbackMessage(streamCtx.Identifier, trpcMessage as StreamFeedbackMessage);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameClose:
-                            await HandleStreamCloseMessage(trpcMessage as StreamCloseMessage, conn.ConnectionId);
+                            await HandleStreamCloseMessage(streamCtx.Identifier, trpcMessage as StreamCloseMessage);
                             break;
                     }
                 }
-                else
+                catch (Exception ex)
                 {
+                    _logger.LogWarning(EventIds.ApplicationError, ex, $"{context.Identifier} Application error.");
+                    await SendErrorResponse(context);
+                }
+            }
+            else
+            {
+                try
+                {
+                    _logger.LogInformation($"{context.Identifier} tRPC starting");
                     var requestHandle = _requestDelegate(context);
                     await requestHandle.ConfigureAwait(false);
-                    
+
                     if (context is UnaryTrpcContext {HasResponded: false} unaryCtx)
                     {
                         await unaryCtx.RespondAsync();
                     }
+
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(EventIds.ApplicationError, ex, $"Application error: tRPC {context.Identifier} in connection {conn.ConnectionId}");
-                await SendErrorResponse(context);
-            }
-            finally
-            {
-                _logger.LogDebug($"Process completed: tRPC {context.Identifier} in connection {conn.ConnectionId}");
-                if (scope != null)
+                catch (Exception ex)
                 {
-                    await scope.DisposeAsync();
+                    _logger.LogWarning(EventIds.ApplicationError, ex, $"{context.Identifier} Application error.");
+                    await SendErrorResponse(context);
+                }
+                finally
+                {
+                    _logger.LogDebug($"{context.Identifier} tRPC completed.");
+                    if (scope != null)
+                    {
+                        await scope.DisposeAsync();
+                    }
                 }
             }
         }
 
-        private async Task HandleStreamDataMessage(StreamDataMessage dataMessage, string connectionId)
+        private async Task HandleStreamInitMessage(StreamTrpcContext ctx, IAsyncDisposable disposableScope)
         {
-            if (!_globalStreamHolder.TryGetStream(connectionId, dataMessage.StreamId, out var initCtx))
+            _logger.LogInformation($"{ctx.Identifier} tRPC starting");
+            if (_globalStreamHolder.TryGetStream(ctx.Connection.ConnectionId, ctx.Identifier.Id, out _))
             {
+                var message = $"{ctx.Identifier} Duplicated stream id.";
+                _logger.LogWarning(EventIds.StreamIdDuplicated, message);
+                throw new InvalidOperationException(message);
+            }
+
+            _globalStreamHolder.AddStream(ctx);
+            ctx.Connection.OnDisconnectedAsync(async (conn) =>
+            {
+                var connectionId = conn.ConnectionId;
+                _logger.LogInformation(EventIds.ConnectionClose, $"Connection closed: connection {connectionId}");
+                await _globalStreamHolder.TryRemoveConnection(connectionId);
+            });
+            (ctx as IStreamCallTracker).OnComplete(async (c, closeType) =>
+            {
+                await CompleteStreamInvocation(c, closeType, disposableScope);
+            });
+
+            var initResponseTask = (ctx as IStreamCallTracker).GetInitResponseTask(ctx.Identifier.Id);
+            var x = StartStreamInvocation(ctx);
+            await initResponseTask;
+        }
+
+        private async Task StartStreamInvocation(StreamTrpcContext ctx)
+        {
+            try
+            {
+                var handler = _requestDelegate(ctx);
+                var output = ctx.FlushAllAsync();
+
+                await Task.WhenAll(handler, output);
+
+                if (ctx.StreamingMode == null)
+                {
+                    await (ctx as IStreamCallTracker).RespondInitMessageAsync(ctx.Identifier.Id, TrpcRetCode.TrpcServerNoserviceErr);
+                }
+                else
+                {
+                    var closeMessage = CreateStreamCloseResponse(ctx.StreamMessage as StreamInitMessage,
+                        TrpcStreamCloseType.TrpcStreamClose, TrpcRetCode.TrpcInvokeSuccess, null);
+                    await ctx.WriteAsync(closeMessage);
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(3));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(EventIds.ApplicationError, ex, $"{ctx.Identifier} Application error.");
+                await SendErrorResponse(ctx);
+            }
+            finally
+            {
+                await _globalStreamHolder.TryRemoveStream(ctx.Identifier.ConnectionId, ctx.Identifier.Id, TrpcStreamCloseType.TrpcStreamClose);
+            }
+        }
+
+        private async Task HandleStreamDataMessage(ContextId ctxId, StreamDataMessage dataMessage)
+        {
+            if (!_globalStreamHolder.TryGetStream(ctxId.ConnectionId, ctxId.Id, out var initCtx))
+            {
+                _logger.LogDebug(EventIds.StreamIdNotFound, $"{ctxId} Stream id not found on server when handle feedback message.");
                 return;
             }
 
+            _logger.LogInformation(EventIds.StreamDataReceived, $"{ctxId} Stream data message received.");
             if (initCtx.ReceiveChannel != null)
             {
                 await initCtx.ReceiveChannel.Writer.WriteAsync(dataMessage!.Data);
             }
         }
 
-        private async Task HandleStreamInitMessage(StreamTrpcContext ctx, IAsyncDisposable disposableScope)
+        private void HandleStreamFeedbackMessage(ContextId ctxId, StreamFeedbackMessage feedbackMessage)
         {
-            if (_globalStreamHolder.TryGetStream(ctx.Connection.ConnectionId, ctx.Identifier.Id, out _))
+            if (!_globalStreamHolder.TryGetStream(ctxId.ConnectionId, ctxId.Id, out var initStreamCtx))
             {
-                throw new InvalidOperationException(
-                    $"Duplicated stream id: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
-            }
-
-            _globalStreamHolder.AddStream(ctx);
-            ctx.Connection.OnDisconnectedAsync(async (conn) =>
-            {
-                _globalStreamHolder.TryRemoveConnection(conn.ConnectionId);
-            });
-
-            try
-            {
-                _logger.LogInformation(EventIds.StreamInitialization,
-                    $"Stream init message message received: tRPC {ctx.Identifier.Id} in connection {ctx.Connection.ConnectionId}");
-
-                var initMessage = ctx.StreamMessage as StreamInitMessage;
-               
-                var handler = _requestDelegate(ctx);
-                var output = ctx.FlushAllAsync();
-                
-                await Task.WhenAll(handler, output);
-
-                switch (ctx.StreamingMode)
-                {
-                    case null:
-                        await (ctx as IStreamCallTracker).RespondInitMessageAsync(TrpcRetCode.TrpcServerNoserviceErr);
-                        break;
-                    case TrpcServerStreamingMode.ClientStreaming:
-                    {
-                        var closeMessage = CreateStreamCloseResponse(initMessage,
-                            TrpcStreamCloseType.TrpcStreamClose, TrpcRetCode.TrpcInvokeSuccess, null);
-                        await ctx.WriteAsync(closeMessage);
-                        break;
-                    }
-                }
-                _globalStreamHolder.TryRemoveStream(ctx.Connection.ConnectionId, ctx.Identifier.Id);
-            }
-            finally
-            {
-                try
-                {
-                    await disposableScope.DisposeAsync();
-                }
-                catch
-                {
-                    // we can't to anything when service provider fails to dispose
-                }
-            }
-        }
-
-        private void HandleStreamFeedbackMessage(StreamFeedbackMessage feedbackMessage, string connectionId)
-        {
-            if (feedbackMessage == null)
-            {
+                _logger.LogDebug(EventIds.StreamIdNotFound, $"{ctxId} Stream id not found on server when handle feedback message.");
                 return;
             }
             
-            if (!_globalStreamHolder.TryGetStream(connectionId, feedbackMessage.StreamId, out var initStreamCtx))
-            {
-                throw new InvalidOperationException(
-                    $"Stream id not found on server: tRPC {feedbackMessage.StreamId} in connection {connectionId}");
-            }
-            
-            _logger.LogInformation(EventIds.WindowSizeIncrement,  
-                $"Window size increment feedback message received: increment {feedbackMessage.WindowSizeIncrement} for tRPC {feedbackMessage.StreamId} in connection {connectionId}");
+            _logger.LogInformation(EventIds.StreamFeedbackReceived,  
+                $"{ctxId} Stream feedback message received: increment {feedbackMessage.WindowSizeIncrement}");
             (initStreamCtx as IStreamCallTracker).IncrementSendWindowSize(
                 feedbackMessage.StreamId, feedbackMessage.WindowSizeIncrement);
         }
 
-        private async Task HandleStreamCloseMessage(StreamCloseMessage closeMessage, string connectionId)
+        private async Task HandleStreamCloseMessage(ContextId ctxId, StreamCloseMessage closeMessage)
         {
-            if (closeMessage == null)
+            if (!_globalStreamHolder.TryGetStream(ctxId.ConnectionId, closeMessage.StreamId, out var initCtx))
             {
+                _logger.LogDebug(EventIds.StreamIdNotFound, $"{ctxId} Stream id not found on server when handle close message.");
                 return;
             }
             
-            if (!_globalStreamHolder.TryGetStream(connectionId, closeMessage.StreamId, out var initCtx))
-            {
-                // the stream may already closed!
-                return;
-            }
-            
-            _logger.LogInformation(EventIds.ConnectionClose,  
-                $"Close message received, connection closing: tRPC {closeMessage.StreamId} in connection {connectionId}");
-
-            initCtx.ReceiveChannel?.Writer.TryComplete();
-            initCtx.SendChannel?.Writer.TryComplete();
-            if (closeMessage.CloseType == TrpcStreamCloseType.TrpcStreamClose && initCtx.SendChannel != null)
-            {
-                await initCtx.SendChannel.Reader.Completion;
-            }
-
-            // stream/connection 相关的清理工作，会在 Connection.Disconnect 事件里处理
-            await initCtx.Connection.AbortAsync();
+            _logger.LogInformation(EventIds.StreamCloseReceived,  
+                $"{ctxId} Stream close message received, stream closing.");
+            await _globalStreamHolder.TryRemoveStream(ctxId.ConnectionId, ctxId.Id, closeMessage.CloseType);
         }
 
         private async Task SendErrorResponse(TrpcContext ctx)
         {
             try
             {
+                if (ctx.Connection == null)
+                {
+                    return;
+                }
+
                 if (ctx is StreamTrpcContext streamCtx)
                 {
                     if (!(streamCtx.StreamMessage is StreamInitMessage))
@@ -239,10 +242,15 @@ namespace TrpcSharp.Server.Trpc
                         }
                     }
 
-                    var initMessage = streamCtx.StreamMessage as StreamInitMessage;
-                    var closeMessage = CreateStreamCloseResponse(initMessage, TrpcStreamCloseType.TrpcStreamReset,
-                        TrpcRetCode.TrpcServerSystemErr, "Internal Server Error");
-                    await streamCtx.WriteAsync(closeMessage);
+                    var closeMessage = CreateStreamCloseResponse(streamCtx.StreamMessage as StreamInitMessage, 
+                        TrpcStreamCloseType.TrpcStreamReset, TrpcRetCode.TrpcServerSystemErr, "Internal Server Error");
+                    if (closeMessage != null)
+                    {
+                        await streamCtx.WriteAsync(closeMessage);
+                    }
+
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    await _globalStreamHolder.TryRemoveStream(ctx.Identifier.ConnectionId, ctx.Identifier.Id, TrpcStreamCloseType.TrpcStreamReset);
                 }
                 else
                 {
@@ -263,8 +271,33 @@ namespace TrpcSharp.Server.Trpc
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(EventIds.ApplicationError, ex, 
-                    $"Error sending error response: tRPC {ctx.Identifier} in connection {ctx.Connection.ConnectionId}");
+                _logger.LogWarning(EventIds.ApplicationError, ex,  $"{ctx.Identifier} Error sending error response.");
+            }
+        }
+
+        private async Task CompleteStreamInvocation(StreamTrpcContext initCtx, TrpcStreamCloseType closeType, IAsyncDisposable disposableScope)
+        {
+            try
+            {
+                _logger.LogDebug($"{initCtx.Identifier} tRPC completed.");
+                initCtx.ReceiveChannel?.Writer.TryComplete();
+                initCtx.SendChannel?.Writer.TryComplete();
+                if (closeType == TrpcStreamCloseType.TrpcStreamClose && initCtx.SendChannel != null)
+                {
+                    await initCtx.SendChannel.Reader.Completion;
+                }
+
+                var connection = initCtx.Connection;
+                await disposableScope.DisposeAsync();
+                if (closeType == TrpcStreamCloseType.TrpcStreamReset && connection != null)
+                {
+                    // stream/connection 相关的清理工作，会在 Connection.Disconnect 事件里处理
+                    await connection.AbortAsync();
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogWarning(EventIds.ApplicationError, ex, $"{initCtx} Error completing stream.");
             }
         }
 
@@ -281,7 +314,7 @@ namespace TrpcSharp.Server.Trpc
             {
                 case UnaryRequestMessage unaryMsg:
                     scope = _serviceScopeFactory.CreateAsyncScope();
-                    context = new UnaryTrpcContext(unaryMsg.RequestId, _trpcFramer)
+                    context = new UnaryTrpcContext(connection.ConnectionId, unaryMsg.RequestId, _trpcFramer)
                     {
                         Services = scope.ServiceProvider,
                         Connection = new AspNetCoreConnection(connection),
@@ -292,7 +325,7 @@ namespace TrpcSharp.Server.Trpc
                 case StreamMessage streamMsg:
                     var isInitMessage = streamMsg.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit;
                     scope = isInitMessage ? _serviceScopeFactory.CreateAsyncScope() : null;
-                    context = new StreamTrpcContext(streamMsg.StreamId, _trpcFramer)
+                    context = new StreamTrpcContext(connection.ConnectionId, streamMsg.StreamId, _trpcFramer)
                     {
                         Services = scope?.ServiceProvider,
                         Connection = new AspNetCoreConnection(connection),
@@ -329,6 +362,11 @@ namespace TrpcSharp.Server.Trpc
         private static StreamCloseMessage CreateStreamCloseResponse(StreamInitMessage initMsg, 
             TrpcStreamCloseType closeType, TrpcRetCode returnCode, string message)
         {
+            if (initMsg == null)
+            {
+                return null;
+            }
+            
             var closeMessage = new StreamCloseMessage
             {
                 StreamId = initMsg.StreamId,

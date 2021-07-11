@@ -49,7 +49,8 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public IReadOnlyDictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
+        public IReadOnlyDictionary<string, TrpcAdditionalData> AdditionalData { get; set; }  =
+            new Dictionary<string, TrpcAdditionalData>();
 
         ///<summary>
         /// 请求数据的序列化类型

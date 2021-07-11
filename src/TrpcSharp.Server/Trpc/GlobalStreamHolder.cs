@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Server.Trpc
@@ -31,7 +32,7 @@ namespace TrpcSharp.Server.Trpc
         public bool TryGetStream(string connectionId, uint streamId, out StreamTrpcContext streamTrpcContext)
         {
             streamTrpcContext = null;
-            if (!_allStreams.TryRemove(connectionId, out var connStreams))
+            if (!_allStreams.TryGetValue(connectionId, out var connStreams))
             {
                 return false;
             }
@@ -39,7 +40,7 @@ namespace TrpcSharp.Server.Trpc
             return connStreams.TryGetValue(streamId, out streamTrpcContext);
         }
         
-        public bool TryRemoveConnection(string connectionId)
+        public async Task<bool> TryRemoveConnection(string connectionId)
         {
             if (!_allStreams.TryRemove(connectionId, out var connStreams))
             {
@@ -48,31 +49,40 @@ namespace TrpcSharp.Server.Trpc
 
             foreach (var streamCtx in connStreams.Values)
             {
-                streamCtx.StreamMessage = null;
-                streamCtx.Services = null;
-                streamCtx.Connection = null;
+                await CleanupStream(streamCtx, TrpcStreamCloseType.TrpcStreamClose);
             }
             connStreams.Clear();
             return true;
         }
         
-        public bool TryRemoveStream(string connectionId, uint streamId)
+        public async Task<bool> TryRemoveStream(string connectionId, uint streamId, TrpcStreamCloseType closeType)
         {
             if (!_allStreams.TryRemove(connectionId, out var connStreams))
             {
                 return false;
             }
-            
-            if (!connStreams.TryRemove(streamId, out var streamCtx))
+
+            if (!connStreams.TryGetValue(streamId, out var streamCtx))
             {
                 return false;
             }
+            
+            await CleanupStream(streamCtx, closeType);
+            connStreams.TryRemove(streamId, out _);       
+            return true;
+        }
+
+        private static async Task CleanupStream(StreamTrpcContext streamCtx, TrpcStreamCloseType closeType)
+        {
+            var tracker = (streamCtx as IStreamCallTracker);
+            await tracker.CompleteAsync(streamCtx.Identifier.Id, closeType);
+            
+            streamCtx.ReceiveChannel?.Writer.TryComplete();
+            streamCtx.SendChannel?.Writer.TryComplete();
 
             streamCtx.StreamMessage = null;
             streamCtx.Services = null;
             streamCtx.Connection = null;
-            return true;
         }
-
     }
 }

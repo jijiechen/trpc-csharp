@@ -66,7 +66,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 var responseMeta = new StreamInitResponseMeta()
                 {
                     ReturnCode = (TrpcRetCode)meta.ResponseMeta.Ret,
-                    ErrorMessage = meta.ResponseMeta.ErrorMsg?.ToStringUtf8()
+                    ErrorMessage = meta.ResponseMeta.ErrorMsg.ToStringUtf8()
                 };
                 decodedMessage.ResponseMeta = responseMeta;
             }
@@ -175,7 +175,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 meta.ResponseMeta = new TrpcStreamInitResponseMeta
                 {
                     Ret = (int)initMsg.ResponseMeta.ReturnCode,
-                     ErrorMsg =  initMsg.ResponseMeta.ErrorMessage.ToByteString(),
+                    ErrorMsg =  initMsg.ResponseMeta.ErrorMessage.ToByteString(),
                 };
             }
             return meta;
@@ -188,7 +188,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 CloseType = (int) closeMsg.CloseType,
                 Ret = (int)closeMsg.ReturnCode,
                 FuncRet = closeMsg.FuncCode,
-                Msg = closeMsg.Message == null ? null : ByteString.CopyFrom(Encoding.UTF8.GetBytes(closeMsg.Message)),
+                Msg = closeMsg.Message.ToByteString(),
                 MessageType = (uint) closeMsg.MessageType,
             };
             closeMsg.AdditionalData?.CopyTo(meta.TransInfo);

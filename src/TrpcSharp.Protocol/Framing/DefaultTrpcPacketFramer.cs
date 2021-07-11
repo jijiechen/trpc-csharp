@@ -22,8 +22,12 @@ namespace TrpcSharp.Protocol.Framing
         }
 
         public bool TryReadMessageCore(bool readAsServer, ref ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, 
-            out SequencePosition consumed, out SequencePosition examined) 
+            out SequencePosition consumed, out SequencePosition examined)
         {
+
+            var reader = new SequenceReader<byte>(buffer);
+            
+            Console.WriteLine($">>>>>>>>>  Reading buffer from {buffer.Start.GetObject()!.GetHashCode()}  start from {buffer.Start.GetInteger()}");
             examined = consumed = buffer.Start;
             var hasHeader = PacketHeaderCodec.TryDecodePacketHeader(buffer, out var frameHeader);
             if (!hasHeader)
@@ -40,7 +44,8 @@ namespace TrpcSharp.Protocol.Framing
                 return false;
             }
 
-            var messageBytes = buffer.Slice(PacketHeaderPositions.FrameHeader_TotalLength);
+            var messageStart = buffer.GetPosition(PacketHeaderPositions.FrameHeader_TotalLength, buffer.Start);
+            var messageBytes = buffer.Slice(messageStart, frameHeader.PacketTotalSize - PacketHeaderPositions.FrameHeader_TotalLength);
             switch (frameHeader.FrameType)
             {
                 case TrpcDataFrameType.TrpcUnaryFrame:

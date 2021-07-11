@@ -38,7 +38,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 框架信息透传的消息类型
         ///</summary>
-        public TrpcMessageType MessageType { get; set; }
+        public TrpcMessageType MessageType { get; set; } = TrpcMessageType.TrpcDefault;
 
         ///<summary>
         /// 附加数据
@@ -46,7 +46,8 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
+        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
+            new Dictionary<string, TrpcAdditionalData>();
     }
 
     public class StreamInitResponseMeta
@@ -57,7 +58,7 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: Ret
         /// </remarks>
-        public TrpcRetCode ReturnCode { get; set; }
+        public TrpcRetCode ReturnCode { get; set; } = TrpcRetCode.TrpcServerNoserviceErr;
         /// <summary>
         /// 调用结果信息描述
         /// 失败的时候用
@@ -98,12 +99,12 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 请求数据的序列化类型
         ///</summary>
-        public TrpcContentEncodeType ContentType { get; set; }
+        public TrpcContentEncodeType ContentType { get; set; } = TrpcContentEncodeType.TrpcProtoEncode;
 
         ///<summary>
         /// 请求数据使用的压缩方式
         ///</summary>
-        public TrpcCompressType ContentEncoding { get; set; }
+        public TrpcCompressType ContentEncoding { get; set; } = TrpcCompressType.TrpcDefaultCompress;
     }
 
     public class StreamDataMessage : StreamMessage
@@ -138,19 +139,19 @@ namespace TrpcSharp.Protocol
         {
             StreamFrameType = TrpcStreamFrameType.TrpcStreamFrameClose;
         }
-        
+
         /// <summary>
         /// 关闭的类型，关闭一端，还是全部关闭
         /// </summary>
-        public TrpcStreamCloseType CloseType { get; set; }
-
+        public TrpcStreamCloseType CloseType { get; set; } = TrpcStreamCloseType.TrpcStreamReset;
+        
         /// <summary>
         /// close 返回码
         /// </summary>
         /// <remarks>
         /// tRPC: Ret
         /// </remarks>
-        public TrpcRetCode ReturnCode { get; set; }
+        public TrpcRetCode ReturnCode { get; set; } = TrpcRetCode.TrpcServerNoserviceErr;
 
         /// <summary>
         /// close信息描述
@@ -164,16 +165,18 @@ namespace TrpcSharp.Protocol
         /// tRPC: FuncRet
         /// </remarks>
         public int FuncCode { get; set; }
+
         ///<summary>
         /// 框架信息透传的消息类型
         ///</summary>
-        public TrpcMessageType MessageType { get; set; }
+        public TrpcMessageType MessageType { get; set; } = TrpcMessageType.TrpcDefault;
         ///<summary>
         /// 附加数据
         ///</summary>
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; }
+        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
+            new Dictionary<string, TrpcAdditionalData>();
     }
 }
