@@ -126,17 +126,17 @@ namespace TrpcSharp.Server.Trpc
             _logger.LogInformation($"{ctx.Identifier} tRPC starting");
             if (_globalStreamHolder.TryGetStream(ctx.Connection.ConnectionId, ctx.Identifier.Id, out _))
             {
-                var message = $"{ctx.Identifier} Duplicated stream id.";
+                var message = $"{ctx.Identifier} Duplicated stream id rejected.";
                 _logger.LogWarning(EventIds.StreamIdDuplicated, message);
                 throw new InvalidOperationException(message);
             }
 
             _globalStreamHolder.AddStream(ctx);
-            ctx.Connection.OnDisconnectedAsync(async (conn) =>
+            ctx.Connection.OnDisconnectedAsync((conn) =>
             {
                 var connectionId = conn.ConnectionId;
                 _logger.LogInformation(EventIds.ConnectionClose, $"Connection closed: connection {connectionId}");
-                await _globalStreamHolder.TryRemoveConnection(connectionId);
+                var _ = _globalStreamHolder.TryRemoveConnection(connectionId);
             });
             (ctx as IStreamCallTracker).OnComplete(async (c, closeType) =>
             {

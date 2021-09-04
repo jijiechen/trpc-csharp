@@ -306,7 +306,14 @@ namespace TrpcSharp.Server.Trpc
                 return;
             }
             
+            if((long)_windowSize + (long)increment > uint.MaxValue){
+                return;
+            }
+
             Interlocked.Add(ref _windowSize, increment);
+            if(_windowSize == 0 || _windowSize == uint.MaxValue){
+                Interlocked.Exchange(ref _windowSize, StreamInitMessage.DefaultWindowSize);
+            }
             _windowSizeWaitHandle?.Cancel();
         }
 
@@ -323,6 +330,9 @@ namespace TrpcSharp.Server.Trpc
         private void WindowSizeUsed(uint usedWindowSize)
         {
             Interlocked.Exchange(ref _windowSize, _windowSize - usedWindowSize);
+            if(_windowSize == 0 || _windowSize == uint.MaxValue){
+                Interlocked.Exchange(ref _windowSize, StreamInitMessage.DefaultWindowSize);
+            }
         }
 
         public async Task FeedbackReadWindowSizeAsync(uint streamId, uint windowSize)
