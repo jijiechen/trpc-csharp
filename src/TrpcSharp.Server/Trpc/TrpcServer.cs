@@ -78,14 +78,10 @@ namespace TrpcSharp.Server.Trpc
                     var buffer = result.Buffer;
                     if (!buffer.IsEmpty)
                     {
-                        var advanced = false;
                         var consumed = buffer.Start;
                         SequencePosition examined;
                         while (_framer.TryReadMessageAsServer(buffer.Slice(consumed), out var message, out consumed, out examined))
                         {
-                            input.AdvanceTo(consumed, examined);
-                            advanced = true;
-
                             try
                             {
                                 await _messageDispatcher.DispatchRequestAsync(message, connection);
@@ -101,11 +97,8 @@ namespace TrpcSharp.Server.Trpc
                                 break;
                             }
                         }
-
-                        if (!advanced)
-                        {
-                            input.AdvanceTo(consumed, examined);
-                        }
+                        
+                        input.AdvanceTo(consumed, examined);
                     }
 
                     if (result.IsCompleted)
