@@ -15,6 +15,14 @@ namespace TrpcSharp.Protocol
         /// 消息所属的流 Id
         /// </summary>
         public uint StreamId { get; set; }
+        
+        
+        void ITrpcMessage.SetMessageData(Stream stream)
+        {
+            SetData(stream);
+        }
+
+        protected abstract void SetData(Stream stream);
     }
     
     
@@ -105,6 +113,12 @@ namespace TrpcSharp.Protocol
         /// 请求数据使用的压缩方式
         ///</summary>
         public TrpcCompressType ContentEncoding { get; set; } = TrpcCompressType.TrpcDefaultCompress;
+
+        
+        protected override void SetData(Stream stream)
+        {
+            throw new System.NotSupportedException();
+        }
     }
 
     public class StreamDataMessage : StreamMessage
@@ -118,6 +132,11 @@ namespace TrpcSharp.Protocol
         /// 从流中收到的数据
         ///</summary>
         public Stream Data { get; set; }
+
+        protected override void SetData(Stream stream)
+        {
+            Data = stream;
+        }
     }
 
     public class StreamFeedbackMessage : StreamMessage
@@ -131,6 +150,11 @@ namespace TrpcSharp.Protocol
         /// 增加的窗口大小
         /// </summary>
         public uint WindowSizeIncrement { get; set; }
+
+        protected override void SetData(Stream stream)
+        {
+            throw new System.NotSupportedException();
+        }
     }
 
     public class StreamCloseMessage : StreamMessage
@@ -178,5 +202,10 @@ namespace TrpcSharp.Protocol
         /// </remarks>
         public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
             new Dictionary<string, TrpcAdditionalData>();
+
+        protected override void SetData(Stream stream)
+        {
+            throw new System.NotSupportedException();
+        }
     }
 }

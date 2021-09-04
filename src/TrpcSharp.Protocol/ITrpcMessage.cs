@@ -1,4 +1,9 @@
-﻿namespace TrpcSharp.Protocol
+﻿using System.IO;
+
+namespace TrpcSharp.Protocol
 {
-    public interface ITrpcMessage {}
+    public interface ITrpcMessage
+    {
+        void SetMessageData(Stream stream);
+    }
 }

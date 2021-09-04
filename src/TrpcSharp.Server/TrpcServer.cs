@@ -78,12 +78,17 @@ namespace TrpcSharp.Server
                     var buffer = result.Buffer;
                     if (!buffer.IsEmpty)
                     {
-                        var consumed = buffer.Start;
-                        SequencePosition examined;
-                        while (_framer.TryReadMessageAsServer(buffer.Slice(consumed), out var message, out consumed, out examined))
+                        if (_framer.TryReadMessageAsServer(buffer, out var message, out long msgDataLength, 
+                            out var consumed, out var examined))
                         {
+                            input.AdvanceTo(consumed, examined);
                             try
                             {
+                                if (msgDataLength > 0)
+                                {
+                                    var stream = new TrpcDataStream(input, msgDataLength);
+                                    message.SetMessageData(stream);
+                                }
                                 await _messageDispatcher.DispatchRequestAsync(message, connection);
                             }
                             catch (OperationCanceledException)
@@ -94,11 +99,12 @@ namespace TrpcSharp.Server
                             catch (Exception ex)
                             {
                                 _logger.LogWarning(EventIds.ApplicationError, ex, "Unhandled application exception: " + ex.Message);
-                                break;
                             }
                         }
-                        
-                        input.AdvanceTo(consumed, examined);
+                        else
+                        {
+                            input.AdvanceTo(consumed, examined);
+                        }
                     }
 
                     if (result.IsCompleted)

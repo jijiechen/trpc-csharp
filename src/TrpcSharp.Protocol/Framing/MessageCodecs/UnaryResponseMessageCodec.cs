@@ -10,14 +10,9 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
 {
     internal static class UnaryResponseMessageCodec
     {
-        public static UnaryResponseMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
+        public static UnaryResponseMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageHeaderBytes)
         {
-            var headerBytes = messageBytes.Slice(0, packetHeader.MessageHeaderSize);
-            var bodyBytes = messageBytes.Slice(packetHeader.MessageHeaderSize, 
-                packetHeader.PacketTotalSize - PacketHeaderPositions.FrameHeader_TotalLength - packetHeader.MessageHeaderSize);
-            
-            var respHeader = ResponseProtocol.Parser.ParseFrom(headerBytes);
-            var bodyStream = new ReadOnlySequenceStream(bodyBytes);
+            var respHeader = ResponseProtocol.Parser.ParseFrom(messageHeaderBytes);
             return new UnaryResponseMessage
             {
                 RequestId = respHeader.RequestId,
@@ -28,9 +23,9 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 AdditionalData = respHeader.TransInfo.ToAdditionalData(),
                 MessageType = (TrpcMessageType)respHeader.MessageType,
                 ContentType = (TrpcContentEncodeType)respHeader.ContentType,
-                ContentEncoding = (TrpcCompressType)respHeader.ContentEncoding,
-                Data =  bodyStream
+                ContentEncoding = (TrpcCompressType)respHeader.ContentEncoding
             };
+            // don't put Data here, since it could be very large
         }
 
         public static async Task EncodeAsync(UnaryResponseMessage respMessage, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)

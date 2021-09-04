@@ -3,21 +3,15 @@ using System.Buffers;
 using System.IO;
 using System.Threading.Tasks;
 using Google.Protobuf;
-using TrpcSharp.Protocol.IO;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing.MessageCodecs
 {
     internal static class UnaryRequestMessageCodec
     {
-        public static UnaryRequestMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
+        public static UnaryRequestMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageHeaderBytes)
         {
-            var headerBytes = messageBytes.Slice(0, packetHeader.MessageHeaderSize);
-            var bodyBytes = messageBytes.Slice(packetHeader.MessageHeaderSize, 
-                packetHeader.PacketTotalSize - PacketHeaderPositions.FrameHeader_TotalLength - packetHeader.MessageHeaderSize);
-            
-            var reqHeader = RequestProtocol.Parser.ParseFrom(headerBytes);
-            var bodyStream = new ReadOnlySequenceStream(bodyBytes);
+            var reqHeader = RequestProtocol.Parser.ParseFrom(messageHeaderBytes);
             return new UnaryRequestMessage
             {
                 RequestId = reqHeader.RequestId,
@@ -29,13 +23,12 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 MessageType = (TrpcMessageType)reqHeader.MessageType,
                 ContentType = (TrpcContentEncodeType)reqHeader.ContentType,
                 ContentEncoding = (TrpcCompressType)reqHeader.ContentEncoding,
-                AdditionalData = reqHeader.TransInfo.ToAdditionalData(),
-                Data =  bodyStream
+                AdditionalData = reqHeader.TransInfo.ToAdditionalData()
             };
+            // don't put Data here, since it could be very large
         }
 
-        public static async Task EncodeAsync(UnaryRequestMessage reqMessage, 
-            Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
+        public static async Task EncodeAsync(UnaryRequestMessage reqMessage, Func<PacketHeader, byte[]> frameHeaderEncoder, Stream output)
         {
             var msgHeader = new RequestProtocol
             {

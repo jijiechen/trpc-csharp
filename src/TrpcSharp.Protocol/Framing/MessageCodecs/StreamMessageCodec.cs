@@ -1,28 +1,26 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
-using System.Text;
 using System.Threading.Tasks;
 using Google.Protobuf;
-using TrpcSharp.Protocol.IO;
 using TrpcSharp.Protocol.Standard;
 
 namespace TrpcSharp.Protocol.Framing.MessageCodecs
 {
     internal static class StreamMessageCodec
     {
-        public static StreamMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageBytes)
+        public static StreamMessage Decode(PacketHeader packetHeader, ReadOnlySequence<byte> messageHeaderBytes)
         {
             switch (packetHeader.StreamFrameType)
             {
                 case TrpcStreamFrameType.TrpcStreamFrameData:
-                    return DecodeDataMessage(packetHeader.StreamId, messageBytes);
+                    return DecodeDataMessage(packetHeader.StreamId, messageHeaderBytes);
                 case TrpcStreamFrameType.TrpcStreamFrameInit:
-                    return DecodeInitMessage(packetHeader.StreamId, messageBytes);
+                    return DecodeInitMessage(packetHeader.StreamId, messageHeaderBytes);
                 case TrpcStreamFrameType.TrpcStreamFrameFeedback:
-                    return DecodeFeedbackMessage(packetHeader.StreamId, messageBytes);
+                    return DecodeFeedbackMessage(packetHeader.StreamId, messageHeaderBytes);
                 case TrpcStreamFrameType.TrpcStreamFrameClose:
-                    return DecodeCloseMessage(packetHeader.StreamId, messageBytes);
+                    return DecodeCloseMessage(packetHeader.StreamId, messageHeaderBytes);
                 default:
                     throw new InvalidDataException($"Unsupported tRPC stream frame type:{(byte)packetHeader.StreamFrameType}");
             }
@@ -32,9 +30,9 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
         {
             return new StreamDataMessage
             {
-                StreamId = streamId,
-                Data = new ReadOnlySequenceStream(bytes)
+                StreamId = streamId
             };
+            // don't put Data here, since it could be very large
         }
 
         static StreamMessage DecodeInitMessage(uint streamId, ReadOnlySequence<byte> bytes)

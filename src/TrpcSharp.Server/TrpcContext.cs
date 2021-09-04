@@ -46,7 +46,10 @@ namespace TrpcSharp.Server
             }
             
             _hasResponded = true;
-            await _framer.WriteMessageAsync(Response, Connection.Transport.Output.AsStream(leaveOpen: true));
+            
+            var outputStream = Connection.Transport.Output.AsStream(leaveOpen: true);
+            await _framer.WriteMessageAsync(Response, outputStream).ConfigureAwait(false);
+            await outputStream.FlushAsync().ConfigureAwait(false);
         }
     }
     
@@ -57,6 +60,8 @@ namespace TrpcSharp.Server
         private CancellationTokenSource _windowSizeWaitHandle;
         private readonly ITrpcPacketFramer _framer;
         private TrpcRetCode? _initResponseCode = null;
+        private Stream _outputStream = null;
+        
         public StreamTrpcContext(string connId, uint streamId, ITrpcPacketFramer framer)
         {
             Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId, ConnectionId = connId};
@@ -162,6 +167,17 @@ namespace TrpcSharp.Server
                 };
                 await WriteMessageToOutput(streamMessage).ConfigureAwait(false);
             }
+            
+            await FlushAsync().ConfigureAwait(false);
+        }
+
+        public async Task FlushAsync()
+        {
+            var outputStream = GetOutputStream();
+            if (outputStream != null)
+            {
+                await outputStream.FlushAsync();
+            }
         }
 
         public async Task WriteAsync(Stream stream)
@@ -187,6 +203,17 @@ namespace TrpcSharp.Server
             await WriteMessageToOutput(trpcMessage);
         }
 
+        private Stream GetOutputStream()
+        {
+            if (_outputStream == null)
+            {
+                return _outputStream = Connection?.Transport?.Output?.AsStream(leaveOpen: true);
+            }
+
+            return _outputStream;
+        }
+
+
         private async Task WriteMessageToOutput(StreamMessage trpcMessage)
         {
             var dataMessage = trpcMessage as StreamDataMessage;
@@ -203,7 +230,7 @@ namespace TrpcSharp.Server
                     return;
                 }
                 
-                await _framer.WriteMessageAsync(trpcMessage, Connection.Transport.Output.AsStream(leaveOpen: true));
+                await _framer.WriteMessageAsync(trpcMessage, GetOutputStream());
                 if (dataLength > 0)
                 {
                     WindowSizeUsed(dataLength);

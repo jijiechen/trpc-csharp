@@ -66,6 +66,11 @@ namespace TrpcSharp.Protocol
         /// 从请求中收到的数据
         ///</summary>
         public Stream Data { get; set; }
+
+        void ITrpcMessage.SetMessageData(Stream stream)
+        {
+            Data = stream;
+        }
     }
 
     public sealed class TrpcAdditionalData

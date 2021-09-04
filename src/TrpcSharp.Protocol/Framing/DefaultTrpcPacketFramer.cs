@@ -10,21 +10,22 @@ namespace TrpcSharp.Protocol.Framing
     public class DefaultTrpcPacketFramer : ITrpcPacketFramer
     {
         public bool TryReadMessageAsClient(ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage,
-            out SequencePosition consumed, out SequencePosition examined)
+            out long dataLength,  out SequencePosition consumed, out SequencePosition examined)
         {
-            return TryReadMessageCore(false, buffer, out trpcMessage, out consumed, out examined);
+            return TryReadMessageCore(false, buffer, out trpcMessage, out dataLength, out consumed, out examined);
         }
 
         public bool TryReadMessageAsServer(ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, 
-            out SequencePosition consumed, out SequencePosition examined)
+            out long dataLength, out SequencePosition consumed, out SequencePosition examined)
         {
-            return TryReadMessageCore(true, buffer, out trpcMessage, out consumed, out examined);
+            return TryReadMessageCore(true, buffer, out trpcMessage, out dataLength, out consumed, out examined);
         }
 
         public bool TryReadMessageCore(bool readAsServer, ReadOnlySequence<byte> buffer, out ITrpcMessage trpcMessage, 
-            out SequencePosition consumed, out SequencePosition examined)
+            out long dataLength, out SequencePosition consumed, out SequencePosition examined)
         {
             examined = consumed = buffer.Start;
+            dataLength = 0;
             var hasHeader = PacketHeaderCodec.TryDecodePacketHeader(buffer, out var frameHeader);
             if (!hasHeader)
             {
@@ -33,28 +34,30 @@ namespace TrpcSharp.Protocol.Framing
                 return false;
             }
 
-            if (buffer.Length < frameHeader.PacketTotalSize)
+            if (buffer.Length < PacketHeaderPositions.FrameHeader_TotalLength + frameHeader.MessageHeaderSize)
             {
                 examined = buffer.End;
                 trpcMessage = null;
                 return false;
             }
 
-            var messageStart = buffer.GetPosition(PacketHeaderPositions.FrameHeader_TotalLength, buffer.Start);
-            var messageBytes = buffer.Slice(messageStart, 
-                frameHeader.PacketTotalSize - PacketHeaderPositions.FrameHeader_TotalLength);
-            var messageBuffer = messageBytes.CopySequence();
+            var messageHeaderBytes = buffer.Slice(
+                buffer.GetPosition(PacketHeaderPositions.FrameHeader_TotalLength, buffer.Start),
+                frameHeader.MessageHeaderSize);
+            dataLength = frameHeader.PacketTotalSize
+                         - PacketHeaderPositions.FrameHeader_TotalLength 
+                         - frameHeader.MessageHeaderSize;
             
             switch (frameHeader.FrameType)
             {
                 case TrpcDataFrameType.TrpcUnaryFrame:
                     trpcMessage = readAsServer
-                        ? (ITrpcMessage)UnaryRequestMessageCodec.Decode(frameHeader, messageBuffer)
-                        : UnaryResponseMessageCodec.Decode(frameHeader, messageBuffer);
+                        ? (ITrpcMessage)UnaryRequestMessageCodec.Decode(frameHeader, messageHeaderBytes)
+                        : UnaryResponseMessageCodec.Decode(frameHeader, messageHeaderBytes);
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 case TrpcDataFrameType.TrpcStreamFrame:
-                    trpcMessage = StreamMessageCodec.Decode(frameHeader, messageBuffer);
+                    trpcMessage = StreamMessageCodec.Decode(frameHeader, messageHeaderBytes);
                     examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
                     return true;
                 default:
