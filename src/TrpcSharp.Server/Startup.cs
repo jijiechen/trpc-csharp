@@ -17,6 +17,12 @@ namespace TrpcSharp.Server
 
                 if (ctx is UnaryTrpcContext unaryCtx)
                 {
+                    Console.WriteLine($"Func: {unaryCtx.UnaryRequest.Func}");
+                    if (unaryCtx.UnaryRequest.Data != null)
+                    {
+                        var content = await new StreamReader(unaryCtx.UnaryRequest.Data).ReadToEndAsync();
+                        Console.WriteLine($"Request Content: {content}");
+                    }
                     unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Identifier}";
                 }
                 
@@ -29,13 +35,11 @@ namespace TrpcSharp.Server
                     while (counter++ < 10)
                     {
                         var hello = Encoding.UTF8.GetBytes("{\"distance\":" + counter + " }");
-                        await streamCtx.SendChannel.Writer.WriteAsync(new MemoryStream(hello));
+                        await streamCtx.WriteAsync(new MemoryStream(hello));
                         await Task.Delay(TimeSpan.FromMilliseconds(500));
                     }
-
-                    streamCtx.SendChannel.Writer.TryComplete();
                     
-                    await foreach (var stream in streamCtx.ReceiveChannel.Reader.ReadAllAsync())
+                    await foreach (var stream in streamCtx.ReadAllAsync())
                     {
                         var sr = new StreamReader(stream);
                         var json = await sr.ReadToEndAsync();

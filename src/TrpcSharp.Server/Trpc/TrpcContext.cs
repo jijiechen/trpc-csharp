@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -102,6 +104,24 @@ namespace TrpcSharp.Server.Trpc
 
         public Channel<Stream> ReceiveChannel { get; set; }
 
+        public void WriteComplete()
+        {
+            SendChannel?.Writer.TryComplete();
+        }
+        
+        public async IAsyncEnumerable<Stream> ReadAllAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (ReceiveChannel?.Reader == null)
+            {
+                yield break;
+            }
+            
+            await foreach(var s in ReceiveChannel.Reader.ReadAllAsync(cancellationToken))
+            {
+                yield return s;
+            };
+        }
+        
         public async Task FlushAllAsync(int secondsWaitForWindowSize = 60)
         {
             if (!AssertInitSuccess(throwIfFailed: false))
@@ -109,13 +129,13 @@ namespace TrpcSharp.Server.Trpc
                 return;
             }
             
-            var channelReader = SendChannel?.Reader;
-            if (channelReader == null)
+            var sender = SendChannel?.Reader;
+            if (sender == null)
             {
                 return;
             }
             
-            await foreach (var item in channelReader.ReadAllAsync().ConfigureAwait(false))
+            await foreach (var item in sender.ReadAllAsync().ConfigureAwait(false))
             {
                 var waited = false;
                 while (item.Length > _windowSize)

@@ -16,7 +16,7 @@ namespace TrpcSharp.Server
 
         public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
             WebHost.CreateDefaultBuilder(args)
-                // .ConfigureLogging((hostingContext, logging) => { logging.SetMinimumLevel(LogLevel.Debug); })
+                .ConfigureLogging((hostingContext, logging) => { logging.SetMinimumLevel(LogLevel.Debug); })
                 .ConfigureServices(services => { services.AddTrpcServer(new IPEndPoint(IPAddress.Any, 8009)); })
                 .UseKestrel()
                 .UseStartup<Startup>();
