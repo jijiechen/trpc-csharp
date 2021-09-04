@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TrpcSharp.Protocol.Framing;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public class TrpcServerOptionsSetup : IConfigureOptions<KestrelServerOptions>
     {

@@ -1,6 +1,6 @@
 ﻿using System.Threading.Tasks;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     /// <summary>
     /// 表示一个可以处理 tRPC 调用的功能

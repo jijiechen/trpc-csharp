@@ -11,7 +11,7 @@ using TrpcSharp.Protocol.Framing;
 using TrpcSharp.Protocol.Standard;
 using TrpcSharp.Server.Extensions;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public interface ITrpcMessageDispatcher
     {

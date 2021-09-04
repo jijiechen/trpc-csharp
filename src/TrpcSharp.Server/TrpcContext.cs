@@ -9,7 +9,7 @@ using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
 using TrpcSharp.Protocol.Standard;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public abstract class TrpcContext
     {
@@ -52,8 +52,8 @@ namespace TrpcSharp.Server.Trpc
     
     public class StreamTrpcContext: TrpcContext, IStreamCallTracker
     {
-        private volatile uint _clientWindowSize;
-        private volatile uint _windowSize;
+        private long _clientWindowSize;
+        private long _windowSize;
         private CancellationTokenSource _windowSizeWaitHandle;
         private readonly ITrpcPacketFramer _framer;
         private TrpcRetCode? _initResponseCode = null;
@@ -151,7 +151,7 @@ namespace TrpcSharp.Server.Trpc
                     }
                     else
                     {
-                        throw new WindowSizeExceededException(item.Length, _windowSize);
+                        throw new WindowSizeExceededException(item.Length, (uint)_windowSize);
                     }
                 }
                 
@@ -265,7 +265,7 @@ namespace TrpcSharp.Server.Trpc
             await RespondInitAsync(retCode);
         }
 
-        private TaskCompletionSource _responseTcs; 
+        private TaskCompletionSource<bool> _responseTcs; 
         Task IStreamCallTracker.GetInitResponseTask(uint streamId)
         {
             if (streamId != Identifier.Id)
@@ -275,7 +275,7 @@ namespace TrpcSharp.Server.Trpc
 
             if (_responseTcs == null && StreamMessage?.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
             {
-                _responseTcs = new TaskCompletionSource();
+                _responseTcs = new TaskCompletionSource<bool>();
             }
 
             return _responseTcs?.Task;
@@ -309,14 +309,14 @@ namespace TrpcSharp.Server.Trpc
                 StreamId = Identifier.Id,
                 ContentType = TrpcContentEncodeType.TrpcProtoEncode,
                 ContentEncoding = TrpcCompressType.TrpcDefaultCompress,
-                InitWindowSize = _windowSize,
+                InitWindowSize = (uint)_windowSize,
                 ResponseMeta = new StreamInitResponseMeta
                 {
                     ReturnCode = retCode
                 }
             };
             await WriteAsync(responseMsg);
-            _responseTcs?.SetResult();
+            _responseTcs?.SetResult(true);
         }
 
         void IStreamCallTracker.IncrementSendWindowSize(uint streamId, uint increment)
@@ -375,7 +375,7 @@ namespace TrpcSharp.Server.Trpc
             var feedbackMessage = new StreamFeedbackMessage
             {
                 StreamId = Identifier.Id,
-                WindowSizeIncrement = StreamInitMessage.DefaultWindowSize - clientWindowSizeLeft
+                WindowSizeIncrement = StreamInitMessage.DefaultWindowSize - (uint)clientWindowSizeLeft
             };
             await WriteAsync(feedbackMessage).ConfigureAwait(false);
         }

@@ -35,7 +35,7 @@ namespace TrpcSharp.Server.Extensions
                 return ad.DisposeAsync();
             }
             _serviceScope.Dispose();
-            return ValueTask.CompletedTask;
+            return new ValueTask();
         }
     }
 }

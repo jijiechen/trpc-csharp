@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using TrpcSharp.Protocol.Standard;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     internal class GlobalStreamHolder
     {

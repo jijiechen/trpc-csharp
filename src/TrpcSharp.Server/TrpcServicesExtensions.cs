@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using TrpcSharp.Protocol.Framing;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public static class TrpcServicesExtensions
     {

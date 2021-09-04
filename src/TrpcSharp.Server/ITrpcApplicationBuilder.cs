@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public interface ITrpcApplicationBuilder
     {

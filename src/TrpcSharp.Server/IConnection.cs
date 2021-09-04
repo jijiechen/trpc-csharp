@@ -4,7 +4,7 @@ using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public interface IConnection
     {

@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 
-namespace TrpcSharp.Server.Trpc
+namespace TrpcSharp.Server
 {
     public static class EventIds
     {
