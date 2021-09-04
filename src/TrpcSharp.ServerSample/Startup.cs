@@ -2,10 +2,9 @@
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using TrpcSharp.Protocol.Standard;
-using TrpcSharp.Server.Trpc;
+using TrpcSharp.Server;
 
-namespace TrpcSharp.Server
+namespace TrpcSharp.ServerSample
 {
     public class Startup
     {
