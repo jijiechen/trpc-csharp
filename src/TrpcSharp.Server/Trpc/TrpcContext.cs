@@ -34,19 +34,19 @@ namespace TrpcSharp.Server.Trpc
         }
 
         public bool HasResponded => _hasResponded;
-        public UnaryRequestMessage UnaryRequest { get; set; }
+        public UnaryRequestMessage Request { get; set; }
         
-        public UnaryResponseMessage UnaryResponse { get; set; }
+        public UnaryResponseMessage Response { get; set; }
         
         public async Task RespondAsync()
         {
-            if (_hasResponded || UnaryRequest.CallType == TrpcCallType.TrpcOnewayCall)
+            if (_hasResponded || Request.CallType == TrpcCallType.TrpcOnewayCall)
             {
                 return;
             }
             
             _hasResponded = true;
-            await _framer.WriteMessageAsync(UnaryResponse, Connection.Transport.Output.AsStream(leaveOpen: true));
+            await _framer.WriteMessageAsync(Response, Connection.Transport.Output.AsStream(leaveOpen: true));
         }
     }
     

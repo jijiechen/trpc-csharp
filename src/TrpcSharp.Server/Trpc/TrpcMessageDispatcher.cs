@@ -261,11 +261,11 @@ namespace TrpcSharp.Server.Trpc
                         return;
                     }
 
-                    unaryCtx.UnaryResponse = CreateResponse(unaryCtx.UnaryRequest);
-                    unaryCtx.UnaryResponse.ReturnCode = TrpcRetCode.TrpcServerSystemErr;
-                    unaryCtx.UnaryResponse.ErrorMessage = "Internal Server Error";
+                    unaryCtx.Response = CreateResponse(unaryCtx.Request);
+                    unaryCtx.Response.ReturnCode = TrpcRetCode.TrpcServerSystemErr;
+                    unaryCtx.Response.ErrorMessage = "Internal Server Error";
               
-                    await _trpcFramer.WriteMessageAsync(unaryCtx.UnaryResponse, 
+                    await _trpcFramer.WriteMessageAsync(unaryCtx.Response, 
                         ctx.Connection.Transport.Output.AsStream(leaveOpen: true));
                 }
             }
@@ -318,8 +318,8 @@ namespace TrpcSharp.Server.Trpc
                     {
                         Services = scope.ServiceProvider,
                         Connection = new AspNetCoreConnection(connection),
-                        UnaryRequest = unaryMsg,
-                        UnaryResponse = CreateResponse(unaryMsg)
+                        Request = unaryMsg,
+                        Response = CreateResponse(unaryMsg)
                     };
                     break;
                 case StreamMessage streamMsg:

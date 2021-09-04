@@ -17,13 +17,13 @@ namespace TrpcSharp.Server
 
                 if (ctx is UnaryTrpcContext unaryCtx)
                 {
-                    Console.WriteLine($"Func: {unaryCtx.UnaryRequest.Func}");
-                    if (unaryCtx.UnaryRequest.Data != null)
+                    Console.WriteLine($"Func: {unaryCtx.Request.Func}");
+                    if (unaryCtx.Request.Data != null)
                     {
-                        var content = await new StreamReader(unaryCtx.UnaryRequest.Data).ReadToEndAsync();
+                        var content = await new StreamReader(unaryCtx.Request.Data).ReadToEndAsync();
                         Console.WriteLine($"Request Content: {content}");
                     }
-                    unaryCtx.UnaryResponse.ErrorMessage = $"Hello {ctx.Identifier}";
+                    unaryCtx.Response.ErrorMessage = $"Hello {ctx.Identifier}";
                 }
                 
                 if (ctx is StreamTrpcContext streamCtx)
