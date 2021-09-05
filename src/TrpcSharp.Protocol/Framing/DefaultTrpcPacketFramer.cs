@@ -34,7 +34,8 @@ namespace TrpcSharp.Protocol.Framing
                 return false;
             }
 
-            if (buffer.Length < PacketHeaderPositions.FrameHeader_TotalLength + frameHeader.MessageHeaderSize)
+            var allHeaderSize = CalcMessageHeadersSize(frameHeader);
+            if (buffer.Length < allHeaderSize)
             {
                 examined = buffer.End;
                 trpcMessage = null;
@@ -43,10 +44,8 @@ namespace TrpcSharp.Protocol.Framing
 
             var messageHeaderBytes = buffer.Slice(
                 buffer.GetPosition(PacketHeaderPositions.FrameHeader_TotalLength, buffer.Start),
-                frameHeader.MessageHeaderSize);
-            dataLength = frameHeader.PacketTotalSize
-                         - PacketHeaderPositions.FrameHeader_TotalLength 
-                         - frameHeader.MessageHeaderSize;
+                allHeaderSize - PacketHeaderPositions.FrameHeader_TotalLength);
+            dataLength = frameHeader.PacketTotalSize - allHeaderSize;
             
             switch (frameHeader.FrameType)
             {
@@ -54,15 +53,36 @@ namespace TrpcSharp.Protocol.Framing
                     trpcMessage = readAsServer
                         ? (ITrpcMessage)UnaryRequestMessageCodec.Decode(frameHeader, messageHeaderBytes)
                         : UnaryResponseMessageCodec.Decode(frameHeader, messageHeaderBytes);
-                    examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
+                    examined = consumed = buffer.GetPosition(allHeaderSize, buffer.Start);
                     return true;
                 case TrpcDataFrameType.TrpcStreamFrame:
                     trpcMessage = StreamMessageCodec.Decode(frameHeader, messageHeaderBytes);
-                    examined = consumed = buffer.GetPosition(frameHeader.PacketTotalSize, buffer.Start);
+                    examined = consumed = buffer.GetPosition(allHeaderSize, buffer.Start);
                     return true;
                 default:
                     throw new InvalidDataException($"Unsupported tRPC frame type: {frameHeader.FrameType}");
             }
+        }
+
+        private static int CalcMessageHeadersSize(PacketHeader frameHeader)
+        {
+            return frameHeader.FrameType switch
+            {
+                TrpcDataFrameType.TrpcUnaryFrame 
+                    => PacketHeaderPositions.FrameHeader_TotalLength + frameHeader.MessageHeaderSize,
+                
+                // stream frame
+                TrpcDataFrameType.TrpcStreamFrame when frameHeader.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameData 
+                    => PacketHeaderPositions.FrameHeader_TotalLength,
+                
+                TrpcDataFrameType.TrpcStreamFrame when frameHeader.PacketTotalSize > int.MaxValue
+                    => throw new InvalidDataException("Message too large"),
+                
+                TrpcDataFrameType.TrpcStreamFrame 
+                    => (int)frameHeader.PacketTotalSize,
+                
+                _ => throw new InvalidDataException($"Unsupported tRPC frame type: {frameHeader.FrameType}")
+            };
         }
 
         public async Task WriteMessageAsync(ITrpcMessage reqMessage, Stream output)

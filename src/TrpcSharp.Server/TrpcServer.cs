@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
 
 namespace TrpcSharp.Server
@@ -43,7 +44,7 @@ namespace TrpcSharp.Server
 
             public override async Task OnConnectedAsync(ConnectionContext connection)
             {
-                _logger.LogDebug($"New connection {connection.ConnectionId} established from remote endpoint {connection.RemoteEndPoint}");
+                _logger.LogDebug(EventIds.ConnectionEstablished, $"Connection established: {connection.ConnectionId} from remote endpoint {connection.RemoteEndPoint}");
                 try
                 {
                     var input = connection.Transport.Input;
@@ -57,17 +58,24 @@ namespace TrpcSharp.Server
                 }
                 catch (ConnectionResetException)
                 {
-                    _logger.LogDebug($"Connection {connection.ConnectionId} reset from remote endpoint {connection.RemoteEndPoint}");
+                    _logger.LogDebug(EventIds.ConnectionReset,$"Connection {connection.ConnectionId} reset from remote endpoint {connection.RemoteEndPoint}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(EventIds.UnknownConnectionError, $"Error in connection {connection.ConnectionId}: {ex.Message}");
                 }
                 finally
                 {
                     await connection.Transport.Input.CompleteAsync();
                     await connection.Transport.Output.CompleteAsync();
+                    
+                    _logger.LogDebug(EventIds.ConnectionClose, $"Connection closed: {connection.ConnectionId} from remote endpoint {connection.RemoteEndPoint}");
                 }
             }
 
             private async Task<bool> ReadAndProcessMessage(ConnectionContext connection, ReadResult result, PipeReader input)
             {
+                var connectionId = connection.ConnectionId;
                 try
                 {
                     if (result.IsCanceled)
@@ -84,21 +92,31 @@ namespace TrpcSharp.Server
                             input.AdvanceTo(consumed, examined);
                             try
                             {
-                                if (msgDataLength > 0)
+                                var hasBody = msgDataLength > 0;
+                                Stream dataStream = null;
+                                if (hasBody)
                                 {
-                                    var stream = new TrpcDataStream(input, msgDataLength);
-                                    message.SetMessageData(stream);
+                                    dataStream = new TrpcDataStream(input, msgDataLength);
+                                    message.SetMessageData(dataStream);
                                 }
+                                
                                 await _messageDispatcher.DispatchRequestAsync(message, connection);
+                                if (dataStream != null)
+                                {
+                                    var dataMsg = message as StreamDataMessage;
+                                    Console.WriteLine($"Consuming streamId: {dataMsg.StreamId}");
+                                }
+                                await ConsumeMessageData(dataStream, connectionId);
                             }
                             catch (OperationCanceledException)
                             {
                                 // Don't treat OperationCanceledException as an error, it's basically a "control flow"
                                 // exception to stop things from running
                             }
-                            catch (Exception ex)
+                            catch (Exception ex) when (ex is not ConnectionAbortedException && ex is not ConnectionResetException)
                             {
-                                _logger.LogWarning(EventIds.ApplicationError, ex, "Unhandled application exception: " + ex.Message);
+                                _logger.LogWarning(EventIds.ApplicationError, ex, 
+                                    $"Unhandled application exception in connection {connectionId}: " + ex.Message);
                             }
                         }
                         else
@@ -111,7 +129,7 @@ namespace TrpcSharp.Server
                     {
                         if (!buffer.IsEmpty)
                         {
-                            throw new InvalidDataException("Connection terminated while reading a message.");
+                            throw new InvalidDataException($"Connection terminated while reading a message in connection {connectionId}.");
                         }
 
                         return false;
@@ -121,18 +139,36 @@ namespace TrpcSharp.Server
                 }
                 catch (InvalidDataException dataEx)
                 {
-                    _logger.LogDebug(EventIds.ProtocolError, dataEx.Message);
+                    _logger.LogDebug(EventIds.ProtocolError, $"Invalid data in connection {connectionId}: {dataEx.Message}");
                     return false;
                 }
-                catch (ConnectionResetException closeEx)
+            }
+
+            /// <summary>
+            /// Consume any remaining body to complete this invocation
+            /// </summary>
+            private async Task ConsumeMessageData(Stream bodyStream, string connectionId)
+            {
+                if (bodyStream == null)
                 {
-                    _logger.LogDebug(EventIds.ConnectionReset, closeEx.Message);
-                    return false;
+                    return;
                 }
-                catch (Exception ex)
+                
+                try
                 {
-                    _logger.LogDebug(EventIds.UnknownConnectionError, ex.Message);
-                    return false;
+                    await bodyStream.CopyToAsync(Stream.Null);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // this stream has been disposed/consumed by application, ignore it
+                }
+                catch (OperationCanceledException ex) when (ex is ConnectionAbortedException || ex is TaskCanceledException)
+                {
+                    _logger.LogDebug(EventIds.ErrorDrainingMessageData, $"Error draining message data in {connectionId}: {ex.Message}");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new ConnectionAbortedException("Application aborted the connection", ex);
                 }
             }
         }

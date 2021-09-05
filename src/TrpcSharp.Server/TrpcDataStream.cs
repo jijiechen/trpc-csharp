@@ -14,12 +14,13 @@ namespace TrpcSharp.Server
         private readonly PipeReader _underlyingReader;
         private readonly long _totalLength;
         private long _unexaminedInputLength;
-
+        private readonly TaskCompletionSource<bool> _accessedByApp;
         public TrpcDataStream(PipeReader underlyingReader, long length)
         {
             _underlyingReader = underlyingReader;
             _totalLength = length;
             _unexaminedInputLength = _totalLength;
+            _accessedByApp = new TaskCompletionSource<bool>();
         }
 
         public override int Read(byte[] buffer, int offset, int count)
@@ -68,7 +69,7 @@ namespace TrpcSharp.Server
 
         private async ValueTask<int> ReadAsyncInternal(Memory<byte> destination, CancellationToken cancellationToken)
         {
-            while (true)
+            while (_unexaminedInputLength > 0)
             {
                 var result = await _underlyingReader.ReadAsync(cancellationToken);
 
@@ -77,45 +78,41 @@ namespace TrpcSharp.Server
                     throw new OperationCanceledException("The read was canceled");
                 }
 
+                if (result.IsCompleted)
+                {
+                    return 0;
+                }
+
                 var buffer = result.Buffer;
                 var length = buffer.Length;
-
                 var consumed = buffer.End;
                 try
                 {
-                    if (length != 0)
-                    {
-                        var maxLength = _totalLength - _unexaminedInputLength;
-                        var actual = (int)Math.Min(Math.Min(length, destination.Length), maxLength);
-
-                        var slice = actual == length ? buffer : buffer.Slice(0, actual);
-                        consumed = slice.End;
-                        slice.CopyTo(destination.Span);
-
-                        _unexaminedInputLength -= actual;
-                        return actual;
-                    }
-
-                    if (_unexaminedInputLength == 0)
+                    if (length == 0)
                     {
                         return 0;
                     }
+                    
+                    var actual = (int)Math.Min(Math.Min(length, destination.Length), _unexaminedInputLength);
 
-                    if (result.IsCompleted)
-                    {
-                        return 0;
-                    }
+                    var slice = actual == length ? buffer : buffer.Slice(0, actual);
+                    consumed = slice.End;
+                    slice.CopyTo(destination.Span);
+
+                    _unexaminedInputLength -= actual;
+                    return actual;
                 }
                 finally
                 {
                     _underlyingReader.AdvanceTo(consumed);
                 }
             }
-         
+            
+            return 0;
         }
 
         /// <inheritdoc />
-        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+        public override async Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
         {
             if (destination == null)
             {
@@ -127,10 +124,59 @@ namespace TrpcSharp.Server
                 throw new ArgumentOutOfRangeException(nameof(bufferSize));
             }
 
-            return _underlyingReader.CopyToAsync(destination, cancellationToken);
+            while (_unexaminedInputLength > 0)
+            {
+                var result = await _underlyingReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                var buffer = result.Buffer;
+                var position = buffer.Start;
+                var consumed = position;
+
+                try
+                {
+                    if (result.IsCanceled)
+                    {
+                        throw new OperationCanceledException("The read was canceled");
+                    }
+
+                    while (_unexaminedInputLength > 0 && buffer.TryGet(ref position, out ReadOnlyMemory<byte> memory, advance: false))
+                    {
+                        if (memory.Length > _unexaminedInputLength)
+                        {
+                            memory = memory[..(int)_unexaminedInputLength];
+                        }
+                        await destination.WriteAsync(memory, cancellationToken).ConfigureAwait(false);
+                        
+                        _unexaminedInputLength -= memory.Length;
+                        position = buffer.GetPosition(memory.Length, position);
+                        consumed = position;
+                    }
+
+                    // The while loop completed succesfully, so we've consumed the entire buffer.
+                    consumed = buffer.End;
+
+                    if (result.IsCompleted)
+                    {
+                        break;
+                    }
+                }
+                finally
+                {
+                    // Advance even if WriteAsync throws so the PipeReader is not left in the
+                    // currently reading state
+                    _underlyingReader.AdvanceTo(consumed);
+                }
+            }
         }
 
+        internal void MarkedAsAccessed()
+        {
+            _accessedByApp.TrySetResult(true);
+        }
 
+        /// <summary>
+        /// 用于指示此 Stream 由业务应用获取访问的事件
+        /// </summary>
+        internal Task AccessByApp => _accessedByApp.Task;
 
         #region UnSupported
 

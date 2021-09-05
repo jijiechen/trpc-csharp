@@ -12,7 +12,7 @@ namespace TrpcSharp.Server
         public void AddStream(TrpcContext initContext)
         {
             if (initContext is StreamTrpcContext streamCtx &&
-                streamCtx.StreamMessage.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
+                streamCtx.InitMessage.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
             {
                 var connId = initContext.Connection.ConnectionId;
                 if (!_allStreams.TryRemove(connId, out var connStreams))
@@ -76,13 +76,6 @@ namespace TrpcSharp.Server
         {
             var tracker = (streamCtx as IStreamCallTracker);
             await tracker.CompleteAsync(streamCtx.Identifier.Id, closeType);
-            
-            streamCtx.ReceiveChannel?.Writer.TryComplete();
-            streamCtx.SendChannel?.Writer.TryComplete();
-
-            streamCtx.StreamMessage = null;
-            streamCtx.Services = null;
-            streamCtx.Connection = null;
         }
     }
 }

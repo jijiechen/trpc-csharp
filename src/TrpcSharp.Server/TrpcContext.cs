@@ -55,6 +55,8 @@ namespace TrpcSharp.Server
     
     public class StreamTrpcContext: TrpcContext, IStreamCallTracker
     {
+        // todo: check if request complete and close channels!
+        
         private long _clientWindowSize;
         private long _windowSize;
         private CancellationTokenSource _windowSizeWaitHandle;
@@ -67,7 +69,7 @@ namespace TrpcSharp.Server
             Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId, ConnectionId = connId};
             _framer = framer;
         }
-        public StreamMessage StreamMessage { get; set; }
+        public StreamMessage InitMessage { get; set; }
         
         public TrpcServerStreamingMode? StreamingMode { get; set; }
 
@@ -78,19 +80,19 @@ namespace TrpcSharp.Server
                 throw new InvalidOperationException("DuplexStreamChannels are only available on tRPC Init contexts");
             }
             
-            if (!(StreamMessage is StreamInitMessage initMessage))
+            if (InitMessage is not StreamInitMessage initMessage)
             {
                 throw new InvalidOperationException("DuplexStreamChannels are only available on tRPC Init contexts");
             }
 
-            if (streamingMode == TrpcServerStreamingMode.DuplexStreaming ||
-                streamingMode == TrpcServerStreamingMode.ClientStreaming)
+            if (streamingMode == TrpcServerStreamingMode.DuplexStreaming 
+                || streamingMode == TrpcServerStreamingMode.ClientStreaming)
             {
                 ReceiveChannel = Channel.CreateUnbounded<Stream>();
             }
 
-            if (streamingMode == TrpcServerStreamingMode.DuplexStreaming ||
-                streamingMode == TrpcServerStreamingMode.ServerStreaming)
+            if (streamingMode == TrpcServerStreamingMode.DuplexStreaming 
+                || streamingMode == TrpcServerStreamingMode.ServerStreaming)
             {
                 SendChannel = Channel.CreateUnbounded<Stream>();
             }
@@ -105,13 +107,13 @@ namespace TrpcSharp.Server
             await RespondInitAsync(TrpcRetCode.TrpcInvokeSuccess);
         }
 
-        public Channel<Stream> SendChannel { get; set; }
+        internal Channel<Stream> SendChannel { get; set; }
 
-        public Channel<Stream> ReceiveChannel { get; set; }
+        internal Channel<Stream> ReceiveChannel { get; set; }
 
         public void WriteComplete()
         {
-            SendChannel?.Writer.TryComplete();
+            // todo: implement complete async
         }
         
         public async IAsyncEnumerable<Stream> ReadAllAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -120,15 +122,18 @@ namespace TrpcSharp.Server
             {
                 yield break;
             }
-            
+
             await foreach(var s in ReceiveChannel.Reader.ReadAllAsync(cancellationToken))
             {
                 yield return s;
+                (s as TrpcDataStream)?.MarkedAsAccessed();
             };
         }
         
-        public async Task FlushAllAsync(int secondsWaitForWindowSize = 60)
+        internal async Task SendAsync(int secondsWaitForWindowSize = 60)
         {
+            // todo: check errors!
+            
             if (!AssertInitSuccess(throwIfFailed: false))
             {
                 return;
@@ -167,10 +172,8 @@ namespace TrpcSharp.Server
                 };
                 await WriteMessageToOutput(streamMessage).ConfigureAwait(false);
             }
-            
-            await FlushAsync().ConfigureAwait(false);
         }
-
+        
         public async Task FlushAsync()
         {
             var outputStream = GetOutputStream();
@@ -192,7 +195,7 @@ namespace TrpcSharp.Server
             await SendChannel.Writer.WriteAsync(stream);
         }
 
-        public async Task WriteAsync(StreamMessage trpcMessage)
+        internal async Task WriteAsync(StreamMessage trpcMessage)
         {
             if (trpcMessage is StreamDataMessage)
             {
@@ -235,10 +238,6 @@ namespace TrpcSharp.Server
                 {
                     WindowSizeUsed(dataLength);
                 }
-            }
-            catch (InvalidOperationException)
-            {
-                // the Pipe Output is complete 
             }
             finally
             {
@@ -300,7 +299,7 @@ namespace TrpcSharp.Server
                 return Task.CompletedTask;
             }
 
-            if (_responseTcs == null && StreamMessage?.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
+            if (_responseTcs == null && InitMessage?.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
             {
                 _responseTcs = new TaskCompletionSource<bool>();
             }
@@ -320,12 +319,16 @@ namespace TrpcSharp.Server
             {
                 return;
             }
-
+            
             if (_completeHandler != null)
             {
                 await _completeHandler(this, closeType);
                 _completeHandler = null;
             }
+            
+            InitMessage = null;
+            Services = null;
+            Connection = null;
         }
 
         private async Task RespondInitAsync(TrpcRetCode retCode)
@@ -448,8 +451,8 @@ namespace TrpcSharp.Server
         
         public override string ToString()
         {
-            var prefix = Type == ContextType.Streaming ? "stream" : "unary";
-            return $"C_{ConnectionId}-T_{prefix}-ID_{Id}";
+            var prefix = Type == ContextType.Streaming ? "s" : "u";
+            return $"C_{ConnectionId}-trpc_{prefix}-{Id}";
         }
     }
 

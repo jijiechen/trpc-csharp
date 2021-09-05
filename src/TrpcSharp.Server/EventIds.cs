@@ -7,6 +7,8 @@ namespace TrpcSharp.Server
         // 91xx: Connection Events
         public static readonly EventId ConnectionReset = new EventId(9100, "Connection Reset");
         public static readonly EventId UnknownConnectionError = new EventId(9101, "Connection Error");
+        public static readonly EventId ErrorDrainingMessageData = new EventId(9102, "Timeout Draining Message Body Data");
+        public static readonly EventId ConnectionEstablished = new EventId(9188, "Connection Closed");
         public static readonly EventId ConnectionClose = new EventId(9199, "Connection Closed");
         
         // 94xx: Format Events

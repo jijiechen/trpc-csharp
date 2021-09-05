@@ -50,7 +50,7 @@ namespace TrpcSharp.Protocol.Framing
                     header.StreamId = ReadStreamId(headerBytes);
                     break;
                 default:
-                    throw new InvalidDataException($"Not supported tRPC frame type:{(byte)header.FrameType}");
+                    throw new InvalidDataException($"Not supported tRPC frame type: {(byte)header.FrameType}");
             }
             return true;
         }

@@ -69,7 +69,7 @@ namespace TrpcSharp.Server
                 try
                 {
                     var streamCtx = context as StreamTrpcContext;
-                    switch (streamCtx!.StreamMessage.StreamFrameType)
+                    switch (streamCtx!.InitMessage.StreamFrameType)
                     {
                         case TrpcStreamFrameType.TrpcStreamFrameInit:
                             await HandleStreamInitMessage(streamCtx, scope);
@@ -103,7 +103,6 @@ namespace TrpcSharp.Server
                     {
                         await unaryCtx.RespondAsync();
                     }
-
                 }
                 catch (Exception ex)
                 {
@@ -134,9 +133,7 @@ namespace TrpcSharp.Server
             _globalStreamHolder.AddStream(ctx);
             ctx.Connection.OnDisconnectedAsync((conn) =>
             {
-                var connectionId = conn.ConnectionId;
-                _logger.LogInformation(EventIds.ConnectionClose, $"Connection closed: connection {connectionId}");
-                var _ = _globalStreamHolder.TryRemoveConnection(connectionId);
+                var _ = _globalStreamHolder.TryRemoveConnection(conn.ConnectionId);
             });
             (ctx as IStreamCallTracker).OnComplete(async (c, closeType) =>
             {
@@ -153,9 +150,10 @@ namespace TrpcSharp.Server
             try
             {
                 var handler = _requestDelegate(ctx);
-                var output = ctx.FlushAllAsync();
+                var output = ctx.SendAsync();
 
                 await Task.WhenAll(handler, output);
+                await ctx.FlushAsync();
 
                 if (ctx.StreamingMode == null)
                 {
@@ -163,7 +161,7 @@ namespace TrpcSharp.Server
                 }
                 else
                 {
-                    var closeMessage = CreateStreamCloseResponse(ctx.StreamMessage as StreamInitMessage,
+                    var closeMessage = CreateStreamCloseResponse(ctx.InitMessage as StreamInitMessage,
                         TrpcStreamCloseType.TrpcStreamClose, TrpcRetCode.TrpcInvokeSuccess, null);
                     await ctx.WriteAsync(closeMessage);
                 }
@@ -193,6 +191,10 @@ namespace TrpcSharp.Server
             if (initCtx.ReceiveChannel != null)
             {
                 await initCtx.ReceiveChannel.Writer.WriteAsync(dataMessage!.Data);
+                if (dataMessage.Data is TrpcDataStream messageData)
+                {
+                    await messageData.AccessByApp;
+                }
             }
         }
 
@@ -234,7 +236,7 @@ namespace TrpcSharp.Server
 
                 if (ctx is StreamTrpcContext streamCtx)
                 {
-                    if (!(streamCtx.StreamMessage is StreamInitMessage))
+                    if (!(streamCtx.InitMessage is StreamInitMessage))
                     {
                         if (!_globalStreamHolder.TryGetStream(streamCtx.Connection.ConnectionId, streamCtx.Identifier.Id, out streamCtx))
                         {
@@ -242,7 +244,7 @@ namespace TrpcSharp.Server
                         }
                     }
 
-                    var closeMessage = CreateStreamCloseResponse(streamCtx.StreamMessage as StreamInitMessage, 
+                    var closeMessage = CreateStreamCloseResponse(streamCtx.InitMessage as StreamInitMessage, 
                         TrpcStreamCloseType.TrpcStreamReset, TrpcRetCode.TrpcServerSystemErr, "Internal Server Error");
                     if (closeMessage != null)
                     {
@@ -280,6 +282,7 @@ namespace TrpcSharp.Server
             try
             {
                 _logger.LogDebug($"{initCtx.Identifier} tRPC completed.");
+
                 initCtx.ReceiveChannel?.Writer.TryComplete();
                 initCtx.SendChannel?.Writer.TryComplete();
                 if (closeType == TrpcStreamCloseType.TrpcStreamClose && initCtx.SendChannel != null)
@@ -329,7 +332,7 @@ namespace TrpcSharp.Server
                     {
                         Services = scope?.ServiceProvider,
                         Connection = new AspNetCoreConnection(connection),
-                        StreamMessage = streamMsg
+                        InitMessage = streamMsg
                     };
                     break;
                 default:

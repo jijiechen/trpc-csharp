@@ -131,7 +131,7 @@ namespace TrpcSharp.Protocol
         ///<summary>
         /// 从流中收到的数据
         ///</summary>
-        public Stream Data { get; set; }
+        public Stream Data { get; set; } = Stream.Null;
 
         protected override void SetData(Stream stream)
         {
