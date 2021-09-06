@@ -54,7 +54,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                     Callee = meta.RequestMeta.Callee?.ToStringUtf8(),
                     Func = meta.RequestMeta.Func?.ToStringUtf8(),
                     MessageType = (TrpcMessageType) meta.RequestMeta.MessageType,
-                    AdditionalData = meta.RequestMeta.TransInfo.ToAdditionalData(),
+                    Metadata = meta.RequestMeta.TransInfo.ToMetadata(),
                 };
                 decodedMessage.RequestMeta = requestMeta;
             }
@@ -93,7 +93,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 FuncCode = meta.FuncRet,
                 Message = meta.Msg?.ToStringUtf8(),
                 MessageType = (TrpcMessageType) meta.MessageType,
-                AdditionalData = meta.TransInfo.ToAdditionalData(),
+                Metadata = meta.TransInfo.ToMetadata(),
             };
         }
     
@@ -165,7 +165,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                     Func = initMsg.RequestMeta.Func.ToByteString(),
                     MessageType = (uint) initMsg.RequestMeta.MessageType
                 };
-                initMsg.RequestMeta.AdditionalData?.CopyTo(meta.RequestMeta.TransInfo);
+                initMsg.RequestMeta.Metadata?.CopyTo(meta.RequestMeta.TransInfo);
             }
             
             if (initMsg.ResponseMeta != null)
@@ -189,7 +189,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 Msg = closeMsg.Message.ToByteString(),
                 MessageType = (uint) closeMsg.MessageType,
             };
-            closeMsg.AdditionalData?.CopyTo(meta.TransInfo);
+            closeMsg.Metadata?.CopyTo(meta.TransInfo);
             return meta;
         }
     }

@@ -45,8 +45,7 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
-            new Dictionary<string, TrpcAdditionalData>();
+        public Dictionary<string, TrpcMetadataData> Metadata { get; set; } = new Dictionary<string, TrpcMetadataData>();
 
         ///<summary>
         /// 框架信息透传的消息类型

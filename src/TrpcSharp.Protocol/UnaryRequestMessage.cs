@@ -49,8 +49,8 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public IReadOnlyDictionary<string, TrpcAdditionalData> AdditionalData { get; set; }  =
-            new Dictionary<string, TrpcAdditionalData>();
+        public IReadOnlyDictionary<string, TrpcMetadataData> Metadata { get; set; }  =
+            new Dictionary<string, TrpcMetadataData>();
 
         ///<summary>
         /// 请求数据的序列化类型
@@ -73,11 +73,11 @@ namespace TrpcSharp.Protocol
         }
     }
 
-    public sealed class TrpcAdditionalData
+    public sealed class TrpcMetadataData
     {
         private readonly ReadOnlyMemory<byte> _mem;
 
-        public TrpcAdditionalData(string strValue)
+        public TrpcMetadataData(string strValue)
         {
             if (strValue == null)
             {
@@ -87,11 +87,11 @@ namespace TrpcSharp.Protocol
             _mem = Encoding.UTF8.GetBytes(strValue);
         }
 
-        public TrpcAdditionalData(byte[] bytes) : this((ReadOnlyMemory<byte>) bytes)
+        public TrpcMetadataData(byte[] bytes) : this((ReadOnlyMemory<byte>) bytes)
         {
         }
 
-        public TrpcAdditionalData(ReadOnlyMemory<byte> bytes)
+        public TrpcMetadataData(ReadOnlyMemory<byte> bytes)
         {
             _mem = bytes;
         }

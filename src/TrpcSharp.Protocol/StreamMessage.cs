@@ -54,8 +54,8 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
-            new Dictionary<string, TrpcAdditionalData>();
+        public Dictionary<string, TrpcMetadataData> Metadata { get; set; } =
+            new Dictionary<string, TrpcMetadataData>();
     }
 
     public class StreamInitResponseMeta
@@ -200,8 +200,8 @@ namespace TrpcSharp.Protocol
         /// <remarks>
         /// tRPC: trans_info
         /// </remarks>
-        public Dictionary<string, TrpcAdditionalData> AdditionalData { get; set; } =
-            new Dictionary<string, TrpcAdditionalData>();
+        public Dictionary<string, TrpcMetadataData> Metadata { get; set; } =
+            new Dictionary<string, TrpcMetadataData>();
 
         protected override void SetData(Stream stream)
         {

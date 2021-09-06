@@ -18,23 +18,23 @@ namespace TrpcSharp.Protocol.Framing
             return str == null ? ByteString.Empty : ByteString.CopyFrom(Encoding.UTF8.GetBytes(str));
         }
 
-        public static Dictionary<string, TrpcAdditionalData> ToAdditionalData(this MapField<string, ByteString> transInfo)
+        public static Dictionary<string, TrpcMetadataData> ToMetadata(this MapField<string, ByteString> transInfo)
         {
             if (transInfo == null)
             {
-                return new Dictionary<string, TrpcAdditionalData>();
+                return new Dictionary<string, TrpcMetadataData>();
             }
             
             return transInfo
                        .ToDictionary(i => i.Key, 
-                           i=> new TrpcAdditionalData(i.Value.Memory));
+                           i=> new TrpcMetadataData(i.Value.Memory));
         }
 
-        public static void CopyTo(this IReadOnlyDictionary<string, TrpcAdditionalData> additionalData, MapField<string, ByteString> pbMap)
+        public static void CopyTo(this IReadOnlyDictionary<string, TrpcMetadataData> metadata, MapField<string, ByteString> pbMap)
         {
-            foreach (var key in additionalData.Keys)
+            foreach (var key in metadata.Keys)
             {
-                var item = additionalData[key].AsBytes();
+                var item = metadata[key].AsBytes();
                 pbMap[key] = ByteString.CopyFrom(item.Span);
             }
         }

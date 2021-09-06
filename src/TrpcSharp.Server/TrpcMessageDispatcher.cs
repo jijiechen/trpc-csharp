@@ -404,12 +404,12 @@ namespace TrpcSharp.Server
             };
             
             // forward special TransInfo
-            unaryMsg.AdditionalData.Keys
+            unaryMsg.Metadata.Keys
                 .Where(k => k.StartsWith("trpc-"))
                 .ToList()
                 .ForEach(key =>
                 {
-                    response.AdditionalData[key] = unaryMsg.AdditionalData[key];
+                    response.Metadata[key] = unaryMsg.Metadata[key];
                 });
 
             return response;
@@ -432,12 +432,12 @@ namespace TrpcSharp.Server
             };
             
             // forward special TransInfo
-            initMsg.RequestMeta?.AdditionalData.Keys
+            initMsg.RequestMeta?.Metadata.Keys
                 .Where(k => k.StartsWith("trpc-"))
                 .ToList()
                 .ForEach(key =>
                 {
-                    closeMessage.AdditionalData[key] = initMsg.RequestMeta.AdditionalData[key];
+                    closeMessage.Metadata[key] = initMsg.RequestMeta.Metadata[key];
                 });
 
             return closeMessage;

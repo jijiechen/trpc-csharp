@@ -23,7 +23,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 MessageType = (TrpcMessageType)reqHeader.MessageType,
                 ContentType = (TrpcContentEncodeType)reqHeader.ContentType,
                 ContentEncoding = (TrpcCompressType)reqHeader.ContentEncoding,
-                AdditionalData = reqHeader.TransInfo.ToAdditionalData()
+                Metadata = reqHeader.TransInfo.ToMetadata()
             };
             // don't put Data here, since it could be very large
         }
@@ -43,7 +43,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 ContentType = (uint)reqMessage.ContentType,
                 ContentEncoding = (uint)reqMessage.ContentEncoding,
             };
-            reqMessage.AdditionalData?.CopyTo(msgHeader.TransInfo);
+            reqMessage.Metadata?.CopyTo(msgHeader.TransInfo);
 
             var msgHeaderLength = msgHeader.CalculateSize();
             var packageTotalLength = PacketHeaderPositions.FrameHeader_TotalLength + msgHeaderLength + (reqMessage.Data?.Length ?? 0);

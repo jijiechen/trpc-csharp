@@ -20,7 +20,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 FuncCode = respHeader.FuncRet,
                 CallType = (TrpcCallType)respHeader.CallType,
                 ErrorMessage =  respHeader.ErrorMsg?.ToStringUtf8(),
-                AdditionalData = respHeader.TransInfo.ToAdditionalData(),
+                Metadata = respHeader.TransInfo.ToMetadata(),
                 MessageType = (TrpcMessageType)respHeader.MessageType,
                 ContentType = (TrpcContentEncodeType)respHeader.ContentType,
                 ContentEncoding = (TrpcCompressType)respHeader.ContentEncoding
@@ -42,7 +42,7 @@ namespace TrpcSharp.Protocol.Framing.MessageCodecs
                 ContentType = (uint)respMessage.ContentType,
                 ContentEncoding = (uint)respMessage.ContentEncoding,
             };
-            respMessage.AdditionalData?.CopyTo(msgHeader.TransInfo);
+            respMessage.Metadata?.CopyTo(msgHeader.TransInfo);
 
             var msgHeaderLength = msgHeader.CalculateSize();
             var packageTotalLength = PacketHeaderPositions.FrameHeader_TotalLength + msgHeaderLength + (respMessage.Data?.Length ?? 0);
