@@ -21,11 +21,13 @@ namespace TrpcSharp.Server
         
         // 92xx: Normal events
         public static readonly EventId UnaryRequestReceived = new EventId(9200, "Unary Request Received");
-        public static readonly EventId StreamInitialization = new EventId(9201, "Stream Session Initializing");
-        public static readonly EventId StreamDataReceived = new EventId(9206, "Stream Data Received");
-        public static readonly EventId StreamFeedbackReceived = new EventId(9207, "Stream Feedback Received");
-        public static readonly EventId StreamComplete = new EventId(9208, "Stream Session Initializing");
-        public static readonly EventId StreamCloseReceived = new EventId(9209, "Stream Close Received");
+        public static readonly EventId RpcStarting = new EventId(9201, "tRPC Completed");
+        public static readonly EventId RpcCompleted = new EventId(9201, "tRPC Completed");
+        
+        public static readonly EventId StreamInitialization = new EventId(9211, "Stream Session Initializing");
+        public static readonly EventId StreamDataReceived = new EventId(9212, "Stream Data Received");
+        public static readonly EventId StreamFeedbackReceived = new EventId(9213, "Stream Feedback Received");
+        public static readonly EventId StreamCloseReceived = new EventId(9214, "Stream Close Received");
         
     }
 }

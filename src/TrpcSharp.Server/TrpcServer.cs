@@ -101,11 +101,6 @@ namespace TrpcSharp.Server
                                 }
                                 
                                 await _messageDispatcher.DispatchRequestAsync(message, connection);
-                                if (dataStream != null)
-                                {
-                                    var dataMsg = message as StreamDataMessage;
-                                    Console.WriteLine($"Consuming streamId: {dataMsg.StreamId}");
-                                }
                                 await ConsumeMessageData(dataStream, connectionId);
                             }
                             catch (OperationCanceledException)

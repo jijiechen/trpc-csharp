@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using TrpcSharp.Protocol;
 using TrpcSharp.Protocol.Framing;
 using TrpcSharp.Protocol.Standard;
+using TrpcSharp.Server.Exceptions;
 
 namespace TrpcSharp.Server
 {
@@ -51,6 +52,16 @@ namespace TrpcSharp.Server
             await _framer.WriteMessageAsync(Response, outputStream).ConfigureAwait(false);
             await outputStream.FlushAsync().ConfigureAwait(false);
         }
+        
+        public void Close(TrpcCompletedException reason = null)
+        {
+            if (reason == null)
+            {
+                reason = new TrpcCompletedException();
+            }
+            
+            throw reason;
+        }
     }
     
     public class StreamTrpcContext: TrpcContext, IStreamCallTracker
@@ -71,7 +82,7 @@ namespace TrpcSharp.Server
         }
         public StreamMessage InitMessage { get; set; }
         
-        public TrpcServerStreamingMode? StreamingMode { get; set; }
+        public TrpcServerStreamingMode? StreamingMode { get; private set; }
 
         public async Task InitializeStreamingAsync(TrpcServerStreamingMode streamingMode)
         {
@@ -113,7 +124,18 @@ namespace TrpcSharp.Server
 
         public void WriteComplete()
         {
-            // todo: implement complete async
+            SendChannel?.Writer.TryComplete();
+        }
+        
+        public void Close(TrpcCompletedException reason = null)
+        {
+            if (reason == null)
+            {
+                reason = new TrpcCompletedException();
+            }
+            
+            WriteComplete();
+            throw reason;
         }
         
         public async IAsyncEnumerable<Stream> ReadAllAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -128,6 +150,24 @@ namespace TrpcSharp.Server
                 yield return s;
                 (s as TrpcDataStream)?.MarkedAsAccessed();
             };
+        }
+
+        private IAsyncEnumerator<Stream> _streamEnumerator;
+        public async Task<Stream> ReadNext()
+        {
+            if (ReceiveChannel?.Reader == null)
+            {
+                return null;
+            }
+
+            if (_streamEnumerator == null)
+            {
+                var nonToken = CancellationToken.None;
+                _streamEnumerator = ReadAllAsync(nonToken).GetAsyncEnumerator(nonToken);
+            }
+            
+            var moveNext = await _streamEnumerator.MoveNextAsync();
+            return moveNext ? _streamEnumerator.Current : null;
         }
         
         internal async Task SendAsync(int secondsWaitForWindowSize = 60)

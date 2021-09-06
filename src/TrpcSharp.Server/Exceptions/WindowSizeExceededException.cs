@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace TrpcSharp.Server
+namespace TrpcSharp.Server.Exceptions
 {
     public class WindowSizeExceededException: Exception
     {
