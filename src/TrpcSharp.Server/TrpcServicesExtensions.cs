@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using TrpcSharp.Protocol.Framing;
+using TrpcSharp.Server.TrpcServices;
 
 namespace TrpcSharp.Server
 {
@@ -29,6 +30,12 @@ namespace TrpcSharp.Server
         public static ITrpcApplicationBuilder Run(this ITrpcApplicationBuilder app, TrpcRequestDelegate requestHandler)
         {
             app.Use(_ => requestHandler);
+            return app;
+        }
+        
+        public static ITrpcApplicationBuilder AddService<TService>(this ITrpcApplicationBuilder app) where TService: class
+        {
+           
             return app;
         }
     }
