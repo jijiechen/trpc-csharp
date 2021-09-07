@@ -74,6 +74,7 @@ namespace TrpcSharp.Server
         private readonly ITrpcPacketFramer _framer;
         private TrpcRetCode? _initResponseCode = null;
         private Stream _outputStream = null;
+        private IAsyncEnumerator<Stream> _streamEnumerator;
         
         public StreamTrpcContext(string connId, uint streamId, ITrpcPacketFramer framer)
         {
@@ -120,6 +121,8 @@ namespace TrpcSharp.Server
         public void WriteComplete()
         {
             SendChannel?.Writer.TryComplete();
+            _outputStream = null;
+            _streamEnumerator = null;
         }
         
         public void Close(TrpcCompletedException reason = null)
@@ -147,7 +150,6 @@ namespace TrpcSharp.Server
             };
         }
 
-        private IAsyncEnumerator<Stream> _streamEnumerator;
         public async Task<Stream> ReadNext()
         {
             if (ReceiveChannel?.Reader == null)
@@ -361,6 +363,7 @@ namespace TrpcSharp.Server
                 _completeHandler = null;
             }
             
+            WriteComplete();
             InitMessage = null;
             Services = null;
             Connection = null;
