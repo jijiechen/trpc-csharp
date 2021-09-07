@@ -16,6 +16,12 @@ namespace TrpcSharp.Server.TrpcServices
         
         public async Task Invoke(TrpcContext trpcContext, TrpcRequestDelegate next)
         {
+            await PerformInvocation(trpcContext);
+            await next(trpcContext);
+        }
+
+        private async Task PerformInvocation(TrpcContext trpcContext)
+        {
             string serviceName = null, methodName = null;
             if (trpcContext is UnaryTrpcContext unaryCtx)
             {
@@ -24,19 +30,23 @@ namespace TrpcSharp.Server.TrpcServices
             }
             else if (trpcContext is StreamTrpcContext streamCtx)
             {
-                var requestMeta = (streamCtx.InitMessage as StreamInitMessage)!.RequestMeta;
-                serviceName = requestMeta.Callee;
-                methodName = requestMeta.Func;
+                var requestMeta = streamCtx.InitMessage.RequestMeta;
+                serviceName = requestMeta?.Callee;
+                methodName = requestMeta?.Func;
             }
 
-            // todo: check if serviceName/methodName is null
+            if (string.IsNullOrWhiteSpace(serviceName) || string.IsNullOrWhiteSpace(methodName))
+            {
+                return;
+            }
+            
             var serviceType = _router.Route(serviceName);
             var activator = trpcContext.Services.GetService(typeof(ITrpcServiceActivator)) as ITrpcServiceActivator;
             if (activator == null)
             {
                 throw new ApplicationException("No 'ITrpcServiceActivator' service has been registered");
             }
-            
+
             var service = activator.Create(trpcContext.Services, serviceType);
             try
             {
@@ -46,7 +56,6 @@ namespace TrpcSharp.Server.TrpcServices
             {
                 await activator.ReleaseAsync(service);
             }
-            await next(trpcContext);
         }
     }
 }

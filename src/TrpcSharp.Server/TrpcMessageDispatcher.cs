@@ -57,32 +57,32 @@ namespace TrpcSharp.Server
 
         public async Task DispatchRequestAsync(ITrpcMessage trpcMessage, ConnectionContext conn)
         {
-            var (context, scope) = CreateTrpcContext(trpcMessage, conn);
-            if (context == null)
+            var (ctxId, context, scope) = CreateTrpcContext(trpcMessage, conn);
+            if (ctxId.Id == 0)
             {
                 _logger.LogWarning($"A tRPC context can not be created for connection {conn.ConnectionId}");
                 return;
             }
-
 
             if (context.Identifier.Type == ContextType.Streaming)
             {
                 try
                 {
                     var streamCtx = context as StreamTrpcContext;
-                    switch (streamCtx!.InitMessage.StreamFrameType)
+                    var streamMessage = trpcMessage as StreamMessage;
+                    switch (streamMessage!.StreamFrameType)
                     {
                         case TrpcStreamFrameType.TrpcStreamFrameInit:
                             await HandleStreamInitMessage(streamCtx, scope);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameData:
-                            await HandleStreamDataMessage(streamCtx.Identifier, trpcMessage as StreamDataMessage);
+                            await HandleStreamDataMessage(ctxId, trpcMessage as StreamDataMessage);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameFeedback:
-                            HandleStreamFeedbackMessage(streamCtx.Identifier, trpcMessage as StreamFeedbackMessage);
+                            HandleStreamFeedbackMessage(ctxId, trpcMessage as StreamFeedbackMessage);
                             break;
                         case TrpcStreamFrameType.TrpcStreamFrameClose:
-                            await HandleStreamCloseMessage(streamCtx.Identifier, trpcMessage as StreamCloseMessage);
+                            await HandleStreamCloseMessage(ctxId, trpcMessage as StreamCloseMessage);
                             break;
                     }
                 }
@@ -169,7 +169,7 @@ namespace TrpcSharp.Server
                 }
                 else
                 {
-                    var closeMessage = CreateStreamCloseResponse(ctx.InitMessage as StreamInitMessage,
+                    var closeMessage = CreateStreamCloseResponse(ctx.InitMessage,
                         TrpcStreamCloseType.TrpcStreamClose, TrpcRetCode.TrpcInvokeSuccess, null);
                     await ctx.WriteAsync(closeMessage);
                 }
@@ -248,15 +248,7 @@ namespace TrpcSharp.Server
 
                 if (ctx is StreamTrpcContext streamCtx)
                 {
-                    if (!(streamCtx.InitMessage is StreamInitMessage))
-                    {
-                        if (!_globalStreamHolder.TryGetStream(streamCtx.Connection.ConnectionId, streamCtx.Identifier.Id, out streamCtx))
-                        {
-                            return;
-                        }
-                    }
-
-                    var closeMessage = CreateStreamCloseResponse(streamCtx.InitMessage as StreamInitMessage, 
+                    var closeMessage = CreateStreamCloseResponse(streamCtx.InitMessage, 
                         TrpcStreamCloseType.TrpcStreamReset, TrpcRetCode.TrpcServerSystemErr, "Internal Server Error");
                     if (closeMessage != null)
                     {
@@ -320,7 +312,7 @@ namespace TrpcSharp.Server
 
             try
             {
-                var closeMessage = CreateStreamCloseResponse(ctx.InitMessage as StreamInitMessage,
+                var closeMessage = CreateStreamCloseResponse(ctx.InitMessage,
                     TrpcStreamCloseType.TrpcStreamClose, TrpcRetCode.TrpcInvokeSuccess, null);
                 await ctx.WriteAsync(closeMessage);
             }
@@ -357,14 +349,15 @@ namespace TrpcSharp.Server
             }
         }
 
-        private (TrpcContext, IAsyncDisposable) CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection)
+        private (ContextId, TrpcContext, IAsyncDisposable) CreateTrpcContext(ITrpcMessage incomingMessage, ConnectionContext connection)
         {
             if (!_isAppRunning || incomingMessage == null)
             {
-                return (null, null);
+                return (default, null, null);
             }
             
-            AsyncServiceScope scope;
+            AsyncServiceScope scope = null;
+            ContextId ctxId = default;
             TrpcContext context = null;
             switch (incomingMessage)
             {
@@ -377,22 +370,31 @@ namespace TrpcSharp.Server
                         Request = unaryMsg,
                         Response = CreateResponse(unaryMsg)
                     };
+                    ctxId = context.Identifier;
                     break;
                 case StreamMessage streamMsg:
                     var isInitMessage = streamMsg.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit;
-                    scope = isInitMessage ? _serviceScopeFactory.CreateAsyncScope() : null;
-                    context = new StreamTrpcContext(connection.ConnectionId, streamMsg.StreamId, _trpcFramer)
+                    if (isInitMessage)
                     {
-                        Services = scope?.ServiceProvider,
-                        Connection = new AspNetCoreConnection(connection),
-                        InitMessage = streamMsg
-                    };
+                        scope = _serviceScopeFactory.CreateAsyncScope();
+                        context = new StreamTrpcContext(connection.ConnectionId, streamMsg.StreamId, _trpcFramer)
+                        {
+                            Services = scope.ServiceProvider,
+                            Connection = new AspNetCoreConnection(connection),
+                            InitMessage = streamMsg as StreamInitMessage
+                        };
+                        ctxId = context.Identifier;
+                    }
+                    else
+                    {
+                        ctxId = new ContextId{ Type = ContextType.Streaming, Id =  streamMsg.StreamId, ConnectionId = connection.ConnectionId};
+                    }
                     break;
                 default:
                     throw new ApplicationException($"Unsupported message type {incomingMessage.GetType()}: connection {connection.ConnectionId}");
             }
             
-            return (context, scope);
+            return (ctxId, context, scope);
         }
         
         private static UnaryResponseMessage CreateResponse(UnaryRequestMessage unaryMsg)

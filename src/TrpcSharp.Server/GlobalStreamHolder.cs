@@ -11,8 +11,7 @@ namespace TrpcSharp.Server
 
         public void AddStream(TrpcContext initContext)
         {
-            if (initContext is StreamTrpcContext streamCtx &&
-                streamCtx.InitMessage.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
+            if (initContext is StreamTrpcContext streamCtx)
             {
                 var connId = initContext.Connection.ConnectionId;
                 if (!_allStreams.TryRemove(connId, out var connStreams))

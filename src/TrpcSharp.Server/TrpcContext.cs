@@ -80,7 +80,7 @@ namespace TrpcSharp.Server
             Identifier = new ContextId{ Type = ContextType.Streaming, Id =  streamId, ConnectionId = connId};
             _framer = framer;
         }
-        public StreamMessage InitMessage { get; set; }
+        public StreamInitMessage InitMessage { get; set; }
         
         public TrpcServerStreamingMode? StreamingMode { get; private set; }
 
@@ -91,11 +91,6 @@ namespace TrpcSharp.Server
                 throw new InvalidOperationException("DuplexStreamChannels are only available on tRPC Init contexts");
             }
             
-            if (InitMessage is not StreamInitMessage initMessage)
-            {
-                throw new InvalidOperationException("DuplexStreamChannels are only available on tRPC Init contexts");
-            }
-
             if (streamingMode == TrpcServerStreamingMode.DuplexStreaming 
                 || streamingMode == TrpcServerStreamingMode.ClientStreaming)
             {
@@ -108,11 +103,11 @@ namespace TrpcSharp.Server
                 SendChannel = Channel.CreateUnbounded<Stream>();
             }
 
-            initMessage.InitWindowSize = initMessage!.InitWindowSize < 1
+            InitMessage.InitWindowSize = InitMessage!.InitWindowSize < 1
                 ? StreamInitMessage.DefaultWindowSize
-                : initMessage!.InitWindowSize;
-            _windowSize = initMessage.InitWindowSize;
-            _clientWindowSize = initMessage.InitWindowSize;
+                : InitMessage!.InitWindowSize;
+            _windowSize = InitMessage.InitWindowSize;
+            _clientWindowSize = InitMessage.InitWindowSize;
 
             StreamingMode = streamingMode;
             await RespondInitAsync(TrpcRetCode.TrpcInvokeSuccess);
@@ -339,7 +334,7 @@ namespace TrpcSharp.Server
                 return Task.CompletedTask;
             }
 
-            if (_responseTcs == null && InitMessage?.StreamFrameType == TrpcStreamFrameType.TrpcStreamFrameInit)
+            if (_responseTcs == null && InitMessage != null)
             {
                 _responseTcs = new TaskCompletionSource<bool>();
             }
