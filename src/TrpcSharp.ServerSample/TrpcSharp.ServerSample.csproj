@@ -9,4 +9,8 @@
       <ProjectReference Include="..\TrpcSharp.Server\TrpcSharp.Server.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Google.Protobuf" Version="3.14.0" />
+    </ItemGroup>
+
 </Project>
