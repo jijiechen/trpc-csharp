@@ -27,7 +27,7 @@ namespace TrpcSharp.Server.TrpcServices
     {
         private static readonly Dictionary<Type, ObjectFactory> ObjectFactories = new();
 
-        public TrpcActivatorHandle Create(IServiceProvider serviceProvider, Type serviceType)
+        public TrpcServiceHandle Create(IServiceProvider serviceProvider, Type serviceType)
         {
             var service = serviceProvider.GetService(serviceType);
             if (service == null)
@@ -39,13 +39,13 @@ namespace TrpcSharp.Server.TrpcServices
                 }
                 
                 service = factory!.Invoke(serviceProvider, Array.Empty<object>());
-                return new TrpcActivatorHandle(service, created: true, state: null);
+                return new TrpcServiceHandle(service, created: true, state: null);
             }
 
-            return new TrpcActivatorHandle(service, created: false, state: null);
+            return new TrpcServiceHandle(service, created: false, state: null);
         }
 
-        public ValueTask ReleaseAsync(TrpcActivatorHandle service)
+        public ValueTask ReleaseAsync(TrpcServiceHandle service)
         {
             if (service.Instance == null)
             {

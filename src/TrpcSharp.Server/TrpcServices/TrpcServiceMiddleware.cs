@@ -1,17 +1,16 @@
-﻿using System;
-using System.Threading.Tasks;
-using TrpcSharp.Protocol;
+﻿using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace TrpcSharp.Server.TrpcServices
 {
     public class TrpcServiceMiddleware : ITrpcMiddleware
     {
         private readonly TrpcServiceRouter _router;
-        private readonly TrpcServiceInvoker _invoker;
-        public TrpcServiceMiddleware(TrpcServiceRouter router, TrpcServiceInvoker invoker)
+        private readonly ILogger<TrpcServiceMiddleware> _logger;
+        public TrpcServiceMiddleware(TrpcServiceRouter router, ILogger<TrpcServiceMiddleware> logger)
         {
             _router = router;
-            _invoker = invoker;
+            _logger = logger;
         }
         
         public async Task Invoke(TrpcContext trpcContext, TrpcRequestDelegate next)
@@ -22,40 +21,13 @@ namespace TrpcSharp.Server.TrpcServices
 
         private async Task PerformInvocation(TrpcContext trpcContext)
         {
-            string serviceName = null, methodName = null;
-            if (trpcContext is UnaryTrpcContext unaryCtx)
-            {
-                serviceName = unaryCtx.Request.Callee;
-                methodName = unaryCtx.Request.Func;
-            }
-            else if (trpcContext is StreamTrpcContext streamCtx)
-            {
-                var requestMeta = streamCtx.InitMessage.RequestMeta;
-                serviceName = requestMeta?.Callee;
-                methodName = requestMeta?.Func;
-            }
-
-            if (string.IsNullOrWhiteSpace(serviceName) || string.IsNullOrWhiteSpace(methodName))
+            var serviceMethodCaller = _router.Route(trpcContext);
+            if (serviceMethodCaller == null)
             {
                 return;
             }
-            
-            var serviceType = _router.Route(serviceName);
-            var activator = trpcContext.Services.GetService(typeof(ITrpcServiceActivator)) as ITrpcServiceActivator;
-            if (activator == null)
-            {
-                throw new ApplicationException("No 'ITrpcServiceActivator' service has been registered");
-            }
 
-            var service = activator.Create(trpcContext.Services, serviceType);
-            try
-            {
-                await _invoker.Invoke(service, methodName, trpcContext);
-            }
-            finally
-            {
-                await activator.ReleaseAsync(service);
-            }
+            await serviceMethodCaller.CallServiceMethod();
         }
     }
 }

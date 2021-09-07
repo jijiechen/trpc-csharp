@@ -33,12 +33,12 @@ namespace TrpcSharp.Server.TrpcServices
         /// <param name="serviceProvider">The service provider.</param>
         /// <param name="serviceType">the service type</param>
         /// <returns>The created service.</returns>
-        TrpcActivatorHandle Create(IServiceProvider serviceProvider, Type serviceType);
+        TrpcServiceHandle Create(IServiceProvider serviceProvider, Type serviceType);
 
         /// <summary>
         /// Releases the specified service.
         /// </summary>
         /// <param name="service">The service to release.</param>
-        ValueTask ReleaseAsync(TrpcActivatorHandle service);
+        ValueTask ReleaseAsync(TrpcServiceHandle service);
     }
 }

@@ -23,15 +23,15 @@ namespace TrpcSharp.Server.TrpcServices
     /// <summary>
     /// Handle to the activator instance.
     /// </summary>
-    public readonly struct TrpcActivatorHandle
+    public readonly struct TrpcServiceHandle
     {
         /// <summary>
-        /// Creates a new instance of <see cref="TrpcActivatorHandle"/>.
+        /// Creates a new instance of <see cref="TrpcServiceHandle"/>.
         /// </summary>
         /// <param name="instance">The activated instance.</param>
         /// <param name="created">A value indicating whether the instanced was created by the activator.</param>
         /// <param name="state">State related to the instance.</param>
-        public TrpcActivatorHandle(object instance, bool created, object state)
+        public TrpcServiceHandle(object instance, bool created, object state)
         {
             Instance = instance;
             Created = created;

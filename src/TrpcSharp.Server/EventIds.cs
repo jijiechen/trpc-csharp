@@ -18,6 +18,7 @@ namespace TrpcSharp.Server
         
         // 95xx: Business Errors
         public static readonly EventId ApplicationError = new EventId(9500, "Application Error");
+        public static readonly EventId ServiceFuncNotFound = new EventId(9504, "Service Or Method Not Found");
         
         // 92xx: Normal events
         public static readonly EventId UnaryRequestReceived = new EventId(9200, "Unary Request Received");
