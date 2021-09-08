@@ -7,14 +7,14 @@ using TrpcSharp.ServerSample.Proto;
 namespace TrpcSharp.ServerSample.Services
 {
    
-    public class WeatherService 
+    public class WeatherService :  WeatherForecasts.WeatherForecastsBase
     {
         private static readonly string[] Summaries = new[]
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
         };
-
-        public async Task<GetWeatherForecastsResponse> GetWeatherForecasts(Empty request, UnaryTrpcContext context)
+    
+        public override async Task<GetWeatherForecastsResponse> GetWeatherForecasts(Empty request, UnaryTrpcContext context)
         {
             var random = new Random();
             var response = new GetWeatherForecastsResponse();
@@ -24,7 +24,7 @@ namespace TrpcSharp.ServerSample.Services
                 Summary = Summaries[random.Next(0, Summaries.Length - 1)],
                 TemperatureC = random.Next(16, 38)
             };
-
+    
             response.Forecasts.Add(new[] {forcast});
             return response;
         }

@@ -36,11 +36,21 @@ namespace TrpcSharp.Server
             return app;
         }
         
-        public static ITrpcApplicationBuilder AddService<TService>(this ITrpcApplicationBuilder app) where TService: class
+        public static void Use<TMiddleware>(this ITrpcApplicationBuilder app) where TMiddleware: ITrpcMiddleware
         {
-           // TrpcServiceMethodBinder add service
-           // TrpcServiceMethodBinder add method
-            return app;
+            app.Use((next) =>
+            {
+                return async (ctx) =>
+                {
+                    var middleware = (TMiddleware) ctx.Services.GetService(typeof(TMiddleware));
+                    await middleware.Invoke(ctx, next);
+                };
+            });
+        }
+        
+        public static void AddService<TService>(this ITrpcApplicationBuilder app) where TService: class
+        {
+            app.AddService(typeof(TService));
         }
     }
 }

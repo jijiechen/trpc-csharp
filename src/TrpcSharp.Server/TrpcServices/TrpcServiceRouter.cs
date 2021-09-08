@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
@@ -6,7 +5,7 @@ using TrpcSharp.Server.TrpcServices.ServiceMethodCallers;
 
 namespace TrpcSharp.Server.TrpcServices
 {
-    public class TrpcServiceRouter
+    internal class TrpcServiceRouter
     {
         private readonly Dictionary<string, ServiceMethodRegistration> _services = new();
         private readonly ILogger<TrpcServiceRouter> _logger;

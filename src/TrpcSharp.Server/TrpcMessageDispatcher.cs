@@ -22,6 +22,7 @@ namespace TrpcSharp.Server
     internal class TrpcMessageDispatcher : ITrpcMessageDispatcher, IHostedService
     {
         private readonly IServiceScopeFactory _serviceScopeFactory;
+        private readonly IServiceProvider _serviceProvider;
         private readonly ITrpcApplicationBuilder _appBuilder;
         private TrpcRequestDelegate _requestDelegate;
         private readonly GlobalStreamHolder _globalStreamHolder;
@@ -29,9 +30,11 @@ namespace TrpcSharp.Server
         private readonly ILogger<TrpcMessageDispatcher> _logger;
         private volatile bool _isAppRunning = false;
 
-        public TrpcMessageDispatcher(ITrpcApplicationBuilder appBuilder, ITrpcPacketFramer framer,
+        public TrpcMessageDispatcher(IServiceProvider serviceProvider,
+            ITrpcApplicationBuilder appBuilder, ITrpcPacketFramer framer,
             IServiceScopeFactory serviceScopeFactory, ILogger<TrpcMessageDispatcher> logger)
         {
+            _serviceProvider = serviceProvider;
             _appBuilder = appBuilder;
             _trpcFramer = framer;
             _logger = logger;
@@ -42,7 +45,7 @@ namespace TrpcSharp.Server
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _requestDelegate = _appBuilder.Build();
+            _requestDelegate = _appBuilder.Build(_serviceProvider);
             _isAppRunning = true;
             return Task.CompletedTask;
         }

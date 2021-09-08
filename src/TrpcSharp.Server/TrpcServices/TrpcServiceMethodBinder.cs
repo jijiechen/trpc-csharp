@@ -29,7 +29,7 @@ namespace TrpcSharp.Server.TrpcServices
 #if NET5_0_OR_GREATER
         [DynamicallyAccessedMembers(ServiceAccessibility)]
 #endif
-        TService> where TService : class
+        TService> : TrpcServiceBinderBase where TService : class
     {
 #if NET5_0_OR_GREATER
         // Non-public methods is required by GetMethod overload that has a BindingFlags argument.
@@ -39,14 +39,14 @@ namespace TrpcSharp.Server.TrpcServices
         private readonly TrpcServiceRouter _router;
         private readonly Type _declaringType;
 
-        internal TrpcServiceMethodBinder(TrpcServiceRouter router, Type declaringType)
+        public TrpcServiceMethodBinder(TrpcServiceRouter router, Type declaringType)
         {
             _router = router;
             _declaringType = declaringType;
         }
 
         
-        public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcUnaryMethod<TRequest, TResponse> handler)
+        public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcUnaryMethod<TRequest, TResponse> handler)
             where TRequest : class
             where TResponse: class
         {
@@ -58,7 +58,7 @@ namespace TrpcSharp.Server.TrpcServices
             _router.AddUnaryMethod(method, metadata, methodExecutor);
         }
         
-        public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcClientStreamingMethod<TRequest> handler) 
+        public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcClientStreamingMethod<TRequest> handler) 
             where TRequest : class
             where TResponse : class
         {
@@ -70,7 +70,7 @@ namespace TrpcSharp.Server.TrpcServices
             _router.AddClientStreamingMethod(method, metadata, methodExecutor);
         }
 
-        public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcDuplexStreamingMethod<TRequest> handler) 
+        public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcDuplexStreamingMethod<TRequest> handler) 
             where TRequest : class
             where TResponse : class
         {
@@ -82,7 +82,7 @@ namespace TrpcSharp.Server.TrpcServices
             _router.AddDuplexStreamingMethod(method, metadata, methodExecutor);
         }
 
-        public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcServerStreamingMethod<TRequest> handler)
+        public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcServerStreamingMethod<TRequest> handler)
             where TRequest : class
             where TResponse : class
         {

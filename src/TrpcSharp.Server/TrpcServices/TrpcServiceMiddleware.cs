@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace TrpcSharp.Server.TrpcServices
 {
-    public class TrpcServiceMiddleware : ITrpcMiddleware
+    internal class TrpcServiceMiddleware : ITrpcMiddleware
     {
         private readonly TrpcServiceRouter _router;
         private readonly ILogger<TrpcServiceMiddleware> _logger;
