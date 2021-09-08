@@ -71,7 +71,7 @@ namespace TrpcSharp.Server.TrpcServices
             where TRequest : class
             where TResponse : class
         {
-            var caller = new UnaryServiceMethodCaller<TService, TRequest, TResponse>(methodExecutor);
+            var caller = new UnaryServiceMethodCaller<TService, TRequest, TResponse>(method, methodExecutor);
             Register(method, caller, metadata);
         }
 

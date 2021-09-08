@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using TrpcSharp.Server;
+using TrpcSharp.Server.TrpcServices;
 
 namespace TrpcSharp.ServerSample
 {
@@ -10,6 +11,7 @@ namespace TrpcSharp.ServerSample
     {
         public void Configure(ITrpcApplicationBuilder app)
         {
+            app.Use<TrpcServiceMiddleware>();
             app.Run(async ctx =>
             {
                 Console.WriteLine($"New invocation: {ctx.Identifier}");

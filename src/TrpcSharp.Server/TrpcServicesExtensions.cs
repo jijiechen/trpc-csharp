@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using TrpcSharp.Protocol.Framing;
+using TrpcSharp.Server.TrpcServices;
 
 namespace TrpcSharp.Server
 {
@@ -19,6 +20,9 @@ namespace TrpcSharp.Server
                 sp => (TrpcMessageDispatcher)(sp.GetService<ITrpcMessageDispatcher>()) ));
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IConfigureOptions<KestrelServerOptions>, TrpcServerOptionsSetup>());
             
+            services.TryAddSingleton<ITrpcServiceActivator, DefaultTrpcServiceActivator>();
+            services.TryAddSingleton<TrpcServiceRouter>();
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<ITrpcMiddleware, TrpcServiceMiddleware>());
             services.Configure<ServerOptions>(o =>
             {
                 o.EndPoint = endPoint;

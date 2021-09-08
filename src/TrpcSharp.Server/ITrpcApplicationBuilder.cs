@@ -48,4 +48,18 @@ namespace TrpcSharp.Server
             return app;
         }
     }
+    
+    public static class AppBuilderExtensions
+    {   public static void Use<TMiddleware>(this ITrpcApplicationBuilder app) where TMiddleware: ITrpcMiddleware
+        {   
+            app.Use((next) =>
+            {
+                return async (ctx) =>
+                {
+                    var middleware = (TMiddleware) ctx.Services.GetService(typeof(TMiddleware));
+                    await middleware.Invoke(ctx, next);
+                };
+            });
+        }
+    }
 }

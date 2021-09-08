@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
+using Grpc.Core;
 
 namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
 {
@@ -9,9 +11,11 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
         where TRequest: class
         where TResponse: class
     {
+        private readonly Method<TRequest, TResponse> _methodDescriptor;
         private readonly TrpcUnaryMethod<TService, TRequest, TResponse> _methodExecutor;
-        public UnaryServiceMethodCaller(TrpcUnaryMethod<TService, TRequest, TResponse> methodExecutor)
+        public UnaryServiceMethodCaller(Method<TRequest, TResponse> methodDescriptor, TrpcUnaryMethod<TService, TRequest, TResponse> methodExecutor)
         {
+            _methodDescriptor = methodDescriptor;
             _methodExecutor = methodExecutor;
         }
         
@@ -23,20 +27,22 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
                 throw new ApplicationException($"Could not initialize service instance for type {typeof(TService).FullName}");
             }
             
+            var unaryContext = trpcContext as UnaryTrpcContext;
             Task<TResponse> invokerTask = null;
             try
             {
-                var unaryContext = trpcContext as UnaryTrpcContext;
-
-                var request = unaryContext.Request; 
-                // var response = unaryContext.Response;
+                byte[] bytes;
+                using(var memoryStream = new MemoryStream())
+                {
+                    unaryContext!.Request.Data.CopyTo(memoryStream);
+                    bytes = memoryStream.ToArray();
+                }
+                var request = _methodDescriptor.RequestMarshaller.Deserializer(bytes);
                 
                 invokerTask = _methodExecutor(
                     serviceHandle.Instance as TService,
-                    request as TRequest,
+                    request,
                     unaryContext);
-                
-                // unaryContext.Response.Data
             }
             catch (Exception ex)
             {
@@ -63,15 +69,29 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
                 var releaseTask = serviceActivator.ReleaseAsync(serviceHandle);
                 if (!releaseTask.IsCompletedSuccessfully)
                 {
-                    return AwaitServiceReleaseAndReturn(invokerTask.Result, serviceActivator, serviceHandle);
+                    return WrapResponseTask(AwaitServiceReleaseAndReturn(invokerTask.Result, serviceActivator, serviceHandle), unaryContext);
                 }
 
-                return invokerTask;
+                return WrapResponseTask(invokerTask, unaryContext);
             }
 
-            return AwaitInvoker(invokerTask, serviceActivator, serviceHandle);
+            return WrapResponseTask(AwaitInvoker(invokerTask, serviceActivator, serviceHandle), unaryContext);
         }
-        
+
+        private async Task WrapResponseTask(Task<TResponse> methodInvokeTask, UnaryTrpcContext context)
+        {
+            await methodInvokeTask;
+            TResponse returnValue = methodInvokeTask.Result;
+            if (returnValue == null)
+            {
+                return;
+            }
+
+            byte[] bytes = _methodDescriptor.ResponseMarshaller.Serializer(returnValue);
+            var memoryStream = new MemoryStream(bytes);
+            context.Response.Data = memoryStream;
+        }
+
         private async Task<TResponse> AwaitInvoker(Task<TResponse> invokerTask, ITrpcServiceActivator serviceActivator, TrpcServiceHandle serviceHandle)
         {
             try
