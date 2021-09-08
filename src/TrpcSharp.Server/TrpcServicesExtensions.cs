@@ -22,7 +22,8 @@ namespace TrpcSharp.Server
             
             services.TryAddSingleton<ITrpcServiceActivator, DefaultTrpcServiceActivator>();
             services.TryAddSingleton<TrpcServiceRouter>();
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<ITrpcMiddleware, TrpcServiceMiddleware>());
+            services.TryAddScoped<TrpcServiceMiddleware>();
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<ITrpcMiddleware, TrpcServiceMiddleware>());
             services.Configure<ServerOptions>(o =>
             {
                 o.EndPoint = endPoint;

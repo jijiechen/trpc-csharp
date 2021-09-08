@@ -9,15 +9,15 @@
       <ProjectReference Include="..\TrpcSharp.Server\TrpcSharp.Server.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Google.Protobuf" Version="3.14.0" />
-      <PackageReference Include="Grpc" Version="2.34.0" />
-      <PackageReference Include="Grpc.Tools" Version="2.34.0">
-          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-          <PrivateAssets>all</PrivateAssets>
-      </PackageReference>
-    </ItemGroup>
-    <ItemGroup>
-        <Protobuf Include="Proto/weather.proto" OutputOptions="base_namespace=Example" />
-    </ItemGroup>
+<!--    <ItemGroup>-->
+<!--      <PackageReference Include="Google.Protobuf" Version="3.14.0" />-->
+<!--      <PackageReference Include="Grpc" Version="2.34.0" />-->
+<!--      <PackageReference Include="Grpc.Tools" Version="2.34.0">-->
+<!--          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>-->
+<!--          <PrivateAssets>all</PrivateAssets>-->
+<!--      </PackageReference>-->
+<!--    </ItemGroup>-->
+<!--    <ItemGroup>-->
+<!--        <Protobuf Include="Proto/weather.proto" OutputOptions="base_namespace=Example" />-->
+<!--    </ItemGroup>-->
 </Project>

@@ -20,7 +20,7 @@ namespace TrpcSharp.ServerSample.Services
             var response = new GetWeatherForecastsResponse();
             var forcast = new WeatherForecast
             {
-                Date = Timestamp.FromDateTime(DateTime.Now),
+                Date = Timestamp.FromDateTime(DateTime.UtcNow),
                 Summary = Summaries[random.Next(0, Summaries.Length - 1)],
                 TemperatureC = random.Next(16, 38)
             };

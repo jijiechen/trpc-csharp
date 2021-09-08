@@ -18,34 +18,29 @@ namespace TrpcSharp.Server.TrpcServices
        
         public ITrpcServiceMethodCaller Route(TrpcContext trpcContext)
         {
-            string serviceName = null, funcName = null;
+            string funcName = null;
             if (trpcContext is UnaryTrpcContext unaryCtx)
             {
-                serviceName = unaryCtx.Request.Callee;
                 funcName = unaryCtx.Request.Func;
             }
             else if (trpcContext is StreamTrpcContext streamCtx)
             {
                 var requestMeta = streamCtx.InitMessage.RequestMeta;
-                serviceName = requestMeta?.Callee;
                 funcName = requestMeta?.Func;
             }
 
-            var specifiedServiceName = string.IsNullOrWhiteSpace(serviceName);
-            var specifiedMethodName = string.IsNullOrWhiteSpace(funcName);
-            if (!specifiedServiceName || !specifiedMethodName)
+            var specifiedMethodName = !string.IsNullOrWhiteSpace(funcName);
+            if (!specifiedMethodName)
             {
                 _logger.LogDebug(EventIds.ServiceFuncNotFound, 
-                    $"No tRPC service or func found '{serviceName}/{funcName}'");
+                    $"No tRPC service or func found '{funcName}'");
                 return null;
             }
-            
 
-            var fullNameToFind = $"/{serviceName}/{funcName}";
-            if (!_services.TryGetValue(fullNameToFind, out var serviceMethod))
+            if (!_services.TryGetValue(funcName, out var serviceMethod))
             {
                 _logger.LogDebug(EventIds.ServiceFuncNotFound, 
-                    $"No tRPC service or func found '{serviceName}/{funcName}'");
+                    $"No tRPC service or func found '{funcName}'");
                 return null;
             }
             

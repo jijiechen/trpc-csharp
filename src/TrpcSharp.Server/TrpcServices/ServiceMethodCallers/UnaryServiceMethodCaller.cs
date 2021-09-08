@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 
 namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
@@ -31,14 +32,22 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
             Task<TResponse> invokerTask = null;
             try
             {
-                byte[] bytes;
-                using(var memoryStream = new MemoryStream())
+                TRequest request;
+                if (typeof(TRequest) != typeof(Empty))
                 {
-                    unaryContext!.Request.Data.CopyTo(memoryStream);
-                    bytes = memoryStream.ToArray();
+                    byte[] bytes;
+                    using(var memoryStream = new MemoryStream())
+                    {
+                        unaryContext!.Request.Data.CopyTo(memoryStream);
+                        bytes = memoryStream.ToArray();
+                    }
+                    request = _methodDescriptor.RequestMarshaller.Deserializer(bytes);
                 }
-                var request = _methodDescriptor.RequestMarshaller.Deserializer(bytes);
-                
+                else
+                {
+                    request = new Empty() as TRequest;
+                }
+               
                 invokerTask = _methodExecutor(
                     serviceHandle.Instance as TService,
                     request,

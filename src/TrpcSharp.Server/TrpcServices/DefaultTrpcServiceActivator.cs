@@ -32,7 +32,7 @@ namespace TrpcSharp.Server.TrpcServices
             var service = serviceProvider.GetService(serviceType);
             if (service == null)
             {
-                if (ObjectFactories.TryGetValue(serviceType, out var factory))
+                if (!ObjectFactories.TryGetValue(serviceType, out var factory))
                 {
                     factory = ActivatorUtilities.CreateFactory(serviceType, Type.EmptyTypes);
                     ObjectFactories.TryAdd(serviceType, factory);
