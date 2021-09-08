@@ -50,51 +50,51 @@ namespace TrpcSharp.Server.TrpcServices
             where TRequest : class
             where TResponse: class
         {
-            var (methodInvoker, metadata) = 
+            var (methodExecutor, metadata) = 
                 CreateModelCore<TrpcUnaryMethod<TService, TRequest, TResponse>>(
                 method.Name,
                 new[] { typeof(TRequest), typeof(UnaryTrpcContext) });
 
-            _router.AddUnaryMethod(method, metadata, methodInvoker);
+            _router.AddUnaryMethod(method, metadata, methodExecutor);
         }
         
         public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcClientStreamingMethod<TRequest> handler) 
             where TRequest : class
             where TResponse : class
         {
-            var (methodInvoker, metadata) = 
+            var (methodExecutor, metadata) = 
                 CreateModelCore<TrpcClientStreamingMethod<TService, TRequest>>(
                 method.Name,
                 new[] { typeof(TRequest), typeof(StreamTrpcContext) });
 
-            _router.AddClientStreamingMethod(method, metadata, methodInvoker);
+            _router.AddClientStreamingMethod(method, metadata, methodExecutor);
         }
 
         public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcDuplexStreamingMethod<TRequest> handler) 
             where TRequest : class
             where TResponse : class
         {
-            var (methodInvoker, metadata) =
+            var (methodExecutor, metadata) =
                 CreateModelCore<TrpcDuplexStreamingMethod<TService, TRequest>>(
                 method.Name,
                 new[] { typeof(TRequest), typeof(StreamTrpcContext) });
 
-            _router.AddDuplexStreamingMethod(method, metadata, methodInvoker);
+            _router.AddDuplexStreamingMethod(method, metadata, methodExecutor);
         }
 
         public void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, TrpcServerStreamingMethod<TRequest> handler)
             where TRequest : class
             where TResponse : class
         {
-            var (methodInvoker, metadata) = 
+            var (methodExecutor, metadata) = 
                 CreateModelCore<TrpcServerStreamingMethod<TService, TRequest>>(
                 method.Name,
                 new[] { typeof(TRequest), typeof(StreamTrpcContext) });
 
-            _router.AddServerStreamingMethod(method, metadata, methodInvoker);
+            _router.AddServerStreamingMethod(method, metadata, methodExecutor);
         }
 
-        private (TDelegate methodInvoker, List<object> metadata) CreateModelCore<TDelegate>(string methodName, Type[] methodParameters) where TDelegate : Delegate
+        private (TDelegate methodExecutor, List<object> metadata) CreateModelCore<TDelegate>(string methodName, Type[] methodParameters) where TDelegate : Delegate
         {
             var handlerMethod = GetMethod(methodName, methodParameters);
             if (handlerMethod == null)
@@ -102,7 +102,7 @@ namespace TrpcSharp.Server.TrpcServices
                 throw new InvalidOperationException($"Could not find '{methodName}' on {typeof(TService)}.");
             }
 
-            var methodInvoker = (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), handlerMethod);
+            var methodExecutor = (TDelegate)Delegate.CreateDelegate(typeof(TDelegate), handlerMethod);
 
             var metadata = new List<object>();
             // Add type metadata first so it has a lower priority
@@ -115,7 +115,7 @@ namespace TrpcSharp.Server.TrpcServices
             // gRPC will return 405 response and log that CORS has not been configured.
             metadata.Add(new HttpMethodMetadata(new[] { "POST" }, acceptCorsPreflight: true));
 
-            return (methodInvoker, metadata);
+            return (methodExecutor, metadata);
         }
 
         private MethodInfo GetMethod(string methodName, Type[] methodParameters)

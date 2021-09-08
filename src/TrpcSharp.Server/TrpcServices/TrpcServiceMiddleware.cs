@@ -7,10 +7,12 @@ namespace TrpcSharp.Server.TrpcServices
     {
         private readonly TrpcServiceRouter _router;
         private readonly ILogger<TrpcServiceMiddleware> _logger;
-        public TrpcServiceMiddleware(TrpcServiceRouter router, ILogger<TrpcServiceMiddleware> logger)
+        private readonly ITrpcServiceActivator _serviceActivator;
+        public TrpcServiceMiddleware(TrpcServiceRouter router, ITrpcServiceActivator serviceActivator, ILogger<TrpcServiceMiddleware> logger)
         {
             _router = router;
             _logger = logger;
+            _serviceActivator = serviceActivator;
         }
         
         public async Task Invoke(TrpcContext trpcContext, TrpcRequestDelegate next)
@@ -27,7 +29,7 @@ namespace TrpcSharp.Server.TrpcServices
                 return;
             }
 
-            await serviceMethodCaller.CallServiceMethod();
+            await serviceMethodCaller.CallServiceMethod(_serviceActivator, trpcContext);
         }
     }
 }

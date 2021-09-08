@@ -4,36 +4,35 @@ using System.Threading.Tasks;
 
 namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
 {
-    internal class UnaryServiceMethodCaller<TService, TRequest, TResponse> : TrpcServiceMethodCallerBase
-        where TService : class
-        where TRequest : class
-        where TResponse : class
+    internal class UnaryServiceMethodCaller<TService, TRequest, TResponse> : ITrpcServiceMethodCaller
+        where TService: class
+        where TRequest: class
+        where TResponse: class
     {
-        private readonly TrpcUnaryMethod<TService, TRequest, TResponse> _methodInvoker;
-
-        public UnaryServiceMethodCaller(ITrpcServiceActivator serviceActivator, TrpcContext trpcContext, 
-            TrpcServiceHandle serviceHandle, TrpcUnaryMethod<TService, TRequest, TResponse> methodInvoker) : base(serviceActivator, trpcContext, serviceHandle)
+        private readonly TrpcUnaryMethod<TService, TRequest, TResponse> _methodExecutor;
+        public UnaryServiceMethodCaller(TrpcUnaryMethod<TService, TRequest, TResponse> methodExecutor)
         {
-            _methodInvoker = methodInvoker;
+            _methodExecutor = methodExecutor;
         }
-
-        public override Task CallServiceMethod()
+        
+        public Task CallServiceMethod(ITrpcServiceActivator serviceActivator, TrpcContext trpcContext)
         {
-            if (ServiceHandle.Instance == null)
+            var serviceHandle = serviceActivator.Create(trpcContext.Services, typeof(TService));
+            if (serviceHandle.Instance == null)
             {
-                throw new ApplicationException("Service instance has not been initialized");
+                throw new ApplicationException($"Could not initialize service instance for type {typeof(TService).FullName}");
             }
             
             Task<TResponse> invokerTask = null;
             try
             {
-                var unaryContext = TrpcContext as UnaryTrpcContext;
+                var unaryContext = trpcContext as UnaryTrpcContext;
 
                 var request = unaryContext.Request; 
                 // var response = unaryContext.Response;
                 
-                invokerTask = _methodInvoker(
-                    ServiceHandle.Instance as TService,
+                invokerTask = _methodExecutor(
+                    serviceHandle.Instance as TService,
                     request as TRequest,
                     unaryContext);
                 
@@ -44,9 +43,9 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
                 // Invoker calls user code. User code may throw an exception instead
                 // of a faulted task. We need to catch the exception, ensure cleanup
                 // runs and convert exception into a faulted task.
-                if (ServiceHandle.Instance != null)
+                if (serviceHandle.Instance != null)
                 {
-                    var releaseTask = ServiceActivator.ReleaseAsync(ServiceHandle);
+                    var releaseTask = serviceActivator.ReleaseAsync(serviceHandle);
                     if (!releaseTask.IsCompletedSuccessfully)
                     {
                         // Capture the current exception state so we can rethrow it after awaiting
@@ -59,21 +58,21 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
                 return Task.FromException<TResponse>(ex);
             }
 
-            if (invokerTask.IsCompletedSuccessfully && ServiceHandle.Instance != null)
+            if (invokerTask.IsCompletedSuccessfully && serviceHandle.Instance != null)
             {
-                var releaseTask = ServiceActivator.ReleaseAsync(ServiceHandle);
+                var releaseTask = serviceActivator.ReleaseAsync(serviceHandle);
                 if (!releaseTask.IsCompletedSuccessfully)
                 {
-                    return AwaitServiceReleaseAndReturn(invokerTask.Result, ServiceHandle);
+                    return AwaitServiceReleaseAndReturn(invokerTask.Result, serviceActivator, serviceHandle);
                 }
 
                 return invokerTask;
             }
 
-            return AwaitInvoker(invokerTask, ServiceHandle);
+            return AwaitInvoker(invokerTask, serviceActivator, serviceHandle);
         }
         
-        private async Task<TResponse> AwaitInvoker(Task<TResponse> invokerTask, TrpcServiceHandle serviceHandle)
+        private async Task<TResponse> AwaitInvoker(Task<TResponse> invokerTask, ITrpcServiceActivator serviceActivator, TrpcServiceHandle serviceHandle)
         {
             try
             {
@@ -83,7 +82,7 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
             {
                 if (serviceHandle.Instance != null)
                 {
-                    await ServiceActivator.ReleaseAsync(serviceHandle);
+                    await serviceActivator.ReleaseAsync(serviceHandle);
                 }
             }
         }
@@ -97,11 +96,13 @@ namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
             return null;
         }
 
-        private async Task<TResponse> AwaitServiceReleaseAndReturn(TResponse invokerResult, TrpcServiceHandle serviceHandle)
+        private async Task<TResponse> AwaitServiceReleaseAndReturn(TResponse invokerResult, ITrpcServiceActivator serviceActivator, TrpcServiceHandle serviceHandle)
         {
-            await ServiceActivator.ReleaseAsync(serviceHandle);
+            await serviceActivator.ReleaseAsync(serviceHandle);
             return invokerResult;
         }
+
+        
     }
 
 }

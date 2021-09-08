@@ -3,38 +3,23 @@ using System.Threading.Tasks;
 
 namespace TrpcSharp.Server.TrpcServices.ServiceMethodCallers
 {
-    internal class StreamingServiceMethodCaller<TService, TRequest, TResponse> : TrpcServiceMethodCallerBase
+    internal class StreamingServiceMethodCaller<TService, TRequest, TResponse> : ITrpcServiceMethodCaller
         where TService : class
         where TRequest : class
         where TResponse : class
     {
-        private readonly TrpcUnaryMethod<TService, TRequest, TResponse> _methodInvoker;
+        private readonly TrpcClientStreamingMethod<TService, TRequest> _methodExecutor;
 
-        public StreamingServiceMethodCaller(ITrpcServiceActivator serviceActivator, TrpcContext trpcContext, 
-            TrpcServiceHandle serviceHandle, TrpcUnaryMethod<TService, TRequest, TResponse> methodInvoker) : base(serviceActivator, trpcContext, serviceHandle)
+        public StreamingServiceMethodCaller(TrpcClientStreamingMethod<TService, TRequest> methodExecutor)
         {
-            _methodInvoker = methodInvoker;
+            _methodExecutor = methodExecutor;
         }
 
-        public override Task CallServiceMethod()
+
+
+        public async Task CallServiceMethod(ITrpcServiceActivator serviceActivator, TrpcContext trpcContext)
         {
-            if (ServiceHandle.Instance == null)
-            {
-                throw new ApplicationException("Service instance has not been initialized");
-            }
-
-            Task<TResponse> invokerTask = null;
-            try
-            {
-
-            }
-            catch (Exception ex)
-            {
-
-                return Task.FromException<TResponse>(ex);
-            }
-
-            return Task.CompletedTask;
+            throw new NotImplementedException();
         }
     }
 
